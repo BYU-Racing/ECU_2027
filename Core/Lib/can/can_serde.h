@@ -5,10 +5,11 @@
 
 #include "assert.hpp"
 #include "CAN_message_t.h"
-#include <cstdint>
+#include <stdint.h>
+#include <stdbool.h>
 
 /* All the CAN messages with their associated IDs. */
-enum class MessageId: uint32_t {
+typedef enum {
     /* Sensor messages. */
     StartSwitch = 0,
     ThrottleOnePosition = 1,
@@ -93,84 +94,84 @@ enum class MessageId: uint32_t {
     CommitAuthor = 1025,
     /* Git username of whoever built/uploaded the firmware, null-terminated, up to 8 bytes. */
     Uploader = 1026,
-};
+} MessageId;
 
-enum class RvcType: uint8_t {
+typedef enum {
     XAccel = 0,
     YAccel = 1,
     ZAccel = 2,
     XRot   = 3,
     YRot   = 4,
     ZRot   = 5,
-};
+} RvcType;
 
-struct RvcMessage {
+typedef struct {
     RvcType type;
     float value;
-};
+} RvcMessage;
 
-struct CriticalFault {
+typedef struct {
     AssertCode error_code;
     uint16_t assert_failure_line;
     uint32_t file_name_hash;
-};
+} CriticalFault;
 
-enum class TirePosition: uint8_t {
+typedef enum {
     FrontLeft  = 0,
     FrontRight = 1,
     RearLeft   = 2,
     RearRight  = 3,
-};
+} TirePosition;
 
-struct TireRpmMessage {
+typedef struct {
     TirePosition position;
     float value;
-};
+} TireRpmMessage;
 
-struct TireTemperatureMessage {
+typedef struct {
     TirePosition position;
     int16_t inner;  /* 1 = 0.1C */
     int16_t outer;  /* 1 = 0.1C */
     int16_t core;   /* 1 = 0.1C */
-};
+} TireTemperatureMessage;
 
-enum class LapMessage {
+typedef enum {
     TrackFormed = 0,
     SectorOneTime = 1,
     SectorTwoTime = 2,
     SectorThreeTime = 3,
     LapTime = 4,
-};
+} LapMessageType;
 
-struct MotorTemperaturesOne {
+typedef struct {
     int16_t phase_a_temp;      /* 1 = 0.1C */
     int16_t phase_b_temp;      /* 1 = 0.1C */
     int16_t phase_c_temp;      /* 1 = 0.1C */
     int16_t gate_driver_temp;  /* 1 = 0.1C */
-};
+} MotorTemperaturesOne;
 
-struct MotorTemperaturesTwo {
+typedef struct {
     int16_t control_board_temp;    /* 1 = 0.1C */
     int16_t rtd1;                  /* 1 = 0.1C */
     int16_t rtd2;                  /* 1 = 0.1C */
     int16_t rtd3;                  /* 1 = 0.1C */
-};
+} MotorTemperaturesTwo;
 
-struct MotorTemperaturesThree {
+typedef struct {
     int16_t coolant_temp;      /* 1 = 0.1C */
     int16_t hot_spot_temp;     /* 1 = 0.1C */
     int16_t motor_temp;        /* 1 = 0.1C */
     int16_t torque_shudder;    /* 1 = 0.1Nm */
-};
+} MotorTemperaturesThree;
 
-struct MotorAnalogInputVoltages {
+typedef struct {
     int16_t analog_input_one;      /* 1 = 0.01V */
     int16_t analog_input_two;      /* 1 = 0.01V */
     int16_t analog_input_three;    /* 1 = 0.01V */
     int16_t analog_input_four;     /* 1 = 0.01V */
-};
+} MotorAnalogInputVoltages;
 
-struct MotorDigitalInputStatus {
+typedef struct {
     bool forward_switch;
     bool reverse_switch;
     bool brake_switch;
@@ -179,44 +180,44 @@ struct MotorDigitalInputStatus {
     bool start_switch;
     bool valet_mode;
     bool digital_input_eight;
-};
+} MotorDigitalInputStatus;
 
-struct MotorPositionInfo {
+typedef struct {
     int16_t motor_angle;            /* 1 = 0.1° */
     int16_t motor_speed;            /* RPM */
     int16_t electrical_frequency;   /* 1 = 0.1Hz */
     int16_t delta_resolver_angle;   /* 1 = 0.1Hz */
-};
+} MotorPositionInfo;
 
-struct MotorCurrentInfo {
+typedef struct {
     int16_t phase_a_current;    /* 1 = 0.1A */
     int16_t phase_b_current;    /* 1 = 0.1A */
     int16_t phase_c_current;    /* 1 = 0.1A */
     int16_t dc_bus_current;     /* 1 = 0.1A */
-};
+} MotorCurrentInfo;
 
-struct MotorVoltageInfo {
+typedef struct {
     int16_t dc_bus_voltage; /* 1 = 0.1V */
     int16_t output_voltage; /* 1 = 0.1V */
     int16_t vab_voltage;    /* 1 = 0.1V */
     int16_t vbc_voltage;    /* 1 = 0.1V */
-};
+} MotorVoltageInfo;
 
-struct MotorFluxInfo {
+typedef struct {
     int16_t flux_command;   /* mWb */
     int16_t flux_feedback;  /* mWb */
     int16_t id_feedback;    /* 1 = 0.1A */
     int16_t iq_feedback;    /* 1 = 0.1A */
-};
+} MotorFluxInfo;
 
-struct MotorInternalVoltages {
+typedef struct {
     int16_t reference_1_5_v;    /* Reference 1.5V. 1 = 0.01V */
     int16_t reference_2_5_v;    /* Reference 2.5V. 1 = 0.01V */
     int16_t reference_5_0_v;    /* Reference 5.0V. 1 = 0.01V */
     int16_t reference_12_v;     /* Reference 12V. 1 = 0.01V */
-};
+} MotorInternalVoltages;
 
-enum class VsmState: uint8_t {
+typedef enum {
     VsmStart = 0,
     PreChargeInit = 1,
     PreChargeActive = 2,
@@ -227,9 +228,9 @@ enum class VsmState: uint8_t {
     BlinkFaultCode = 7,
     ShutdownInProcess = 14,
     RecyclePower = 15,
-};
+} VsmState;
 
-enum class InverterState: uint8_t {
+typedef enum {
     PowerOn = 0,
     Stop = 1,
     OpenLoop = 2,
@@ -243,46 +244,46 @@ enum class InverterState: uint8_t {
     _Internal4 = 10,
     _Internal5 = 11,
     _Internal6 = 12,
-};
+} InverterState;
 
-struct RelayState {
+typedef struct {
     bool relay_one;
     bool relay_two;
     bool relay_three;
     bool relay_four;
     bool relay_five;
     bool relay_six;
-};
+} RelayState;
 
-enum class InverterRunMode {
+typedef enum {
     TorqueMode = 0,
     SpeedMode = 1,
-};
+} InverterRunMode;
 
-enum class InverterActiveDischargeState {
+typedef enum {
     DischargeDisabled = 0,
     DischargedEnabledAndWaiting = 1,
     PerformingSpeedCheck = 2,
     DischargeActivelyOccuring = 3,
     DischargeCompleted = 4,
-};
+} InverterActiveDischargeState;
 
-enum class InverterCommandMode {
+typedef enum {
     CanMode = 0,
     VsmMode = 1,
-};
+} InverterCommandMode;
 
-enum class BurstModelMode {
+typedef enum {
     Stall = 0,
     HighSpeed = 1,
-};
+} BurstModelMode;
 
-enum class MotorDirection {
+typedef enum {
     Reverse = 0,
     Forward = 1,
-};
+} MotorDirection;
 
-struct MotorInternalStates {
+typedef struct {
     VsmState vsm_state;
     uint8_t pwm_frequency; /* kHz */
     InverterState inverter_state;
@@ -322,9 +323,9 @@ struct MotorInternalStates {
     /* For Gen 5 / CM: false = Not Limiting, true = Limiting. Indicates if Stall Burst Model is
      * limiting the current. For select inverters only. See Stall Burst manual. */
     bool limit_stall_burst_model;
-};
+} MotorInternalStates;
 
-struct MotorFaultCodes {
+typedef struct {
     bool hardware_gate_or_desaturation_fault_first; /* For whatever reason the docs have two versions of this. */
     bool hardware_overcurrent_fault;
     bool accelerator_shorted;
@@ -399,9 +400,9 @@ struct MotorFaultCodes {
     bool reserved_bit_61;
     bool resolver_not_connected;
     bool reserved_bit_63;
-};
+} MotorFaultCodes;
 
-struct MotorTorqueAndTimerInfo {
+typedef struct MotorTorqueAndTimerInfo {
     int16_t commanded_torque;
     int16_t torque_feedback;
 
@@ -410,17 +411,17 @@ struct MotorTorqueAndTimerInfo {
      * when a reset of the processor has occurred.
      * 1 = 3ms = 0.003s */
     uint32_t power_on_timer;
-};
+} MotorTorqueAndTimerInfo;
 
 /* Full title is Modulation Index & Flux Weakening Output Information */
-struct MotorModIndexAndFlux {
+typedef struct {
     int16_t modulation_index; /* Assumed to be signed. */
     int16_t flux_weakening_output; /* This is the current output of the flux regulator. 1 = 0.1A */
     int16_t id_command; /* The commanded D-axis current. 1 = 0.1A */
     int16_t iq_command; /* The commanded Q-axis current. 1 = 0.1A */
-};
+} MotorModIndexAndFlux;
 
-struct MotorControlCommand {
+typedef struct {
     int16_t torque; /* 1 = 0.1Nm. */
     int16_t speed;  /* RPM */
     MotorDirection direction;
@@ -437,16 +438,16 @@ struct MotorControlCommand {
      * set to a positive number then the Motor and Regen Torque limits are set to the
      * torque value sent.*/
     int16_t torque_limit;
-};
+} MotorControlCommand;
 
 CAN_message_t empty_can_message(MessageId id, uint8_t len);
-uint16_t read_u16_le(const uint8_t* buf);
+uint16_t read_u16_le(uint8_t* buf);
 void write_u16_le(uint8_t* buf, uint16_t value);
-int16_t read_i16_le(const uint8_t* buf);
+int16_t read_i16_le(uint8_t* buf);
 void write_i16_le(uint8_t* buf, int16_t value);
 uint32_t read_u32_le(const uint8_t* buf);
 void write_u32_le(uint8_t* buf, uint32_t value);
-float read_f32_le(const uint8_t* buf);
+float read_f32_le(uint8_t* buf);
 void write_f32_le(uint8_t* buf, float value);
 void write_u64_le(uint8_t* buf, uint64_t value);
 

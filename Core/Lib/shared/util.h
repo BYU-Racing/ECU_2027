@@ -8,6 +8,9 @@ extern "C" {
 #endif
 
 bool     adc_inputs_start(void);
+
+static uint16_t adc_get(int i);
+
 uint16_t read_throttle_1(void);
 uint16_t read_throttle_2(void);
 uint16_t read_brake(void);

@@ -628,6 +628,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
+  can_buses_send_shutdown();
   while (1)
   {
   }

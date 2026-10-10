@@ -4,11 +4,7 @@
 #include <optional>
 
 #include "constants.hpp"
-<<<<<<< HEAD
-#include "CAN_message_t.hpp"
-=======
 #include "CAN_message_t.h"
->>>>>>> e2076087a2a2da198c37c586714f03828df2b6d3
 #include "util.hpp"
 #include "assert.hpp"
 
