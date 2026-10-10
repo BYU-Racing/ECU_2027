@@ -1,5 +1,8 @@
 #include "can_buses.h"
+<<<<<<< HEAD
 #include "stm32g4xx_hal_fdcan.h"
+=======
+>>>>>>> e2076087a2a2da198c37c586714f03828df2b6d3
 
 extern FDCAN_HandleTypeDef hfdcan2, hfdcan3;
 
@@ -9,10 +12,17 @@ CanBus MotorCAN;
 void can_buses_init(void) {
     can_bus_init(&DataCAN, &hfdcan2);
     can_bus_init(&MotorCAN, &hfdcan3);
+<<<<<<< HEAD
     if (can_bus_start(&DataCAN) != HAL_OK) {
         Error_Handler();
     }
     if (can_bus_start(&MotorCAN) != HAL_OK) {
+=======
+    if (!can_bus_start(&DataCAN)) {
+        Error_Handler();
+    }
+    if (!can_bus_start(&MotorCAN)) {
+>>>>>>> e2076087a2a2da198c37c586714f03828df2b6d3
         Error_Handler();
     }
 }

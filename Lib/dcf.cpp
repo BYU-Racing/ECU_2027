@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 #include "util.hpp"
 #include "can_serde.hpp"
 
@@ -59,3 +60,8 @@ void loop()
     }
 }
 
+=======
+// Fully forgotton.
+// DataCollector Forward.
+// May you rest in peace.
+>>>>>>> e2076087a2a2da198c37c586714f03828df2b6d3

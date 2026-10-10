@@ -117,7 +117,13 @@ int main(void)
   MX_TIM3_Init();
   MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
+  // Starts the CAN buses
   can_buses_init();
+  // Start the ADC calibration
+  if (!adc_inputs_start()) { 
+    Error_Handler(); 
+  }
+
   /* USER CODE END 2 */
 
   /* Init scheduler */
