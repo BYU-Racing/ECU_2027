@@ -32,7 +32,7 @@ void can_buses_send_shutdown(void) {
     uint8_t control_command_message_length = 8;
 
     CAN_message_t message = {0};
-    message.id  = MessageId.ControlCommand;   /* MessageId::ControlCommand: all zeroes = zero torque, inverter off */
+    message.id  = MESSAGE_ID_CONTROL_COMMAND;   /* MESSAGE_ID_CONTROL_COMMAND: all zeroes = zero torque, inverter off */
     message.len = control_command_message_length;
 
     can_bus_write(&MotorCAN, &message);

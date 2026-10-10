@@ -1,9 +1,10 @@
 /*
  * This module adds support for serialization/deserialization (serde) of can messages.
  */
-#pragma once
+#ifndef CAN_SERDE_H
+#define CAN_SERDE_H
 
-#include "assert.hpp"
+#include "assert.h"
 #include "CAN_message_t.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -11,98 +12,98 @@
 /* All the CAN messages with their associated IDs. */
 typedef enum {
     /* Sensor messages. */
-    StartSwitch = 0,
-    ThrottleOnePosition = 1,
-    ThrottleTwoPosition = 2,
-    BrakePressure = 3,
+    MESSAGE_ID_START_SWITCH = 0,
+    MESSAGE_ID_THROTTLE_ONE_POSITION = 1,
+    MESSAGE_ID_THROTTLE_TWO_POSITION = 2,
+    MESSAGE_ID_BRAKE_PRESSURE = 3,
     /* Acceleration and Rotation. */
-    Rvc = 4,
-    TireRpm = 5,
+    MESSAGE_ID_RVC = 4,
+    MESSAGE_ID_TIRE_RPM = 5,
     /* Tire temperature (inner, outer, core). */
-    TireTemperature = 6,
-    BmsPercent = 7,
-    BmsTemperature = 8,
-    Gps = 9,
-    Lap = 10,
+    MESSAGE_ID_TIRE_TEMPERATURE = 6,
+    MESSAGE_ID_BMS_PERCENT = 7,
+    MESSAGE_ID_BMS_TEMPERATURE = 8,
+    MESSAGE_ID_GPS = 9,
+    MESSAGE_ID_LAP = 10,
 
     /* Motor messages, see internal docs for details. */
     /* Temperatures of Phase A, B, C, and Gate Driver Board. */
-    TemperaturesOne = 160,
+    MESSAGE_ID_TEMPERATURES_ONE = 160,
     /* Control Board Temperature and RTD values. */
-    TemperaturesTwo = 161,
+    MESSAGE_ID_TEMPERATURES_TWO = 161,
     /* Coolant, Hot Spot, Motor Temperature, and Torque Shudder. */
-    TemperaturesThree = 162,
+    MESSAGE_ID_TEMPERATURES_THREE = 162,
     /* Analog input voltages for the motor. */
-    AnalogInputVoltages = 163,
+    MESSAGE_ID_ANALOG_INPUT_VOLTAGES = 163,
     /* Status of digital inputs (ignition, brake, reverse, etc). */
-    DigitalInputStatus = 164,
+    MESSAGE_ID_DIGITAL_INPUT_STATUS = 164,
     /* Motor angle, speed, and electrical frequency. */
-    PositionInfo = 165,
+    MESSAGE_ID_POSITION_INFO = 165,
     /* Phase currents and DC Bus current. */
-    CurrentInfo = 166,
+    MESSAGE_ID_CURRENT_INFO = 166,
     /* DC Bus voltage, output voltage, and measured phase voltages. */
-    VoltageInfo = 167,
+    MESSAGE_ID_VOLTAGE_INFO = 167,
     /* Commanded and feedback flux, D-axis and Q-axis currents. */
-    FluxInfo = 168,
+    MESSAGE_ID_FLUX_INFO = 168,
     /* Internal reference voltages (1.5V, 2.5V, 5V, and system voltage). */
-    InternalVoltages = 169,
+    MESSAGE_ID_INTERNAL_VOLTAGES = 169,
     /* Internal states like VSM, Inverter, and Relay status. */
-    InternalStates = 170,
-    /* POST and Run Fault Codes. */
-    FaultCodes = 171,
+    MESSAGE_ID_INTERNAL_STATES = 170,
+    /* POST and Run MESSAGE_ID_FAULT Codes. */
+    MESSAGE_ID_FAULT_CODES = 171,
     /* Commanded torque, torque feedback, and power-on timer. */
-    TorqueAndTimerInfo = 172,
+    MESSAGE_ID_TORQUE_AND_TIMER_INFO = 172,
     /* Modulation Index, Flux Weakening Output, D-axis and Q-axis currents. */
-    ModIndexAndFlux = 173,
+    MESSAGE_ID_MOD_INDEX_AND_FLUX = 173,
     /* For factory use only - not for CAN use. */
-    FirmwareInfo = 174,
+    MESSAGE_ID_FIRMWARE_INFO = 174,
     /* Downloadable only - not for CAN use. */
-    DiagnosticData = 175,
+    MESSAGE_ID_DIAGNOSTIC_DATA = 175,
     /* Torque Command, Torque Feedback, Motor Speed, DC Bus Voltage. */
-    HighSpeed = 176,
-    TorqueCapability = 177,
+    MESSAGE_ID_HIGH_SPEED = 176,
+    MESSAGE_ID_TORQUE_CAPABILITY = 177,
     /* The Command Message is used to transmit data to the controller. This message
      * is sent from a user-supplied external controller to the motor controller. The
      * Control Message (0x0C0) is used to operate the controller via the CAN interface. */
-    ControlCommand = 192,
-    ParameterCommand = 193,
-    ParameterResponse = 194,
+    MESSAGE_ID_CONTROL_COMMAND = 192,
+    MESSAGE_ID_PARAMETER_COMMAND = 193,
+    MESSAGE_ID_PARAMETER_RESPONSE = 194,
 
     /* Project messages. */
     /* Request a health check for all sensors. No data in the buffers. */
-    HealthCheck = 200,
+    MESSAGE_ID_HEALTH_CHECK = 200,
     /* Health Check response from DC1. */
-    HealthCheckResponseDc1 = 201,
+    MESSAGE_ID_HEALTH_CHECK_RESPONSE_DC1 = 201,
     /* Health Check response from DC2. */
-    HealthCheckResponseDc2 = 202,
+    MESSAGE_ID_HEALTH_CHECK_RESPONSE_DC2 = 202,
     /* Health Check response from DC3. */
-    HealthCheckResponseDc3 = 203,
+    MESSAGE_ID_HEALTH_CHECK_RESPONSE_DC3 = 203,
     /* Critical Failure has occured. */
-    Fault = 204,
+    MESSAGE_ID_FAULT = 204,
     /* Car functional drive state. */
-    DriveState = 205,
+    MESSAGE_ID_DRIVE_STATE = 205,
     /* Set the ECU driving mode - used for varied torque output. */
-    DriveMode = 206,
+    MESSAGE_ID_DRIVE_MODE = 206,
     /* Set the minimum throttle value. */
-    ThrottleMin = 207,
+    MESSAGE_ID_THROTTLE_MIN = 207,
     /* Set the maximum throttle value. */
-    ThrottleMax = 208,
+    MESSAGE_ID_THROTTLE_MAX = 208,
 
     /* First 8 bytes of the git commit hash. */
-    CodeHash = 1024,
+    MESSAGE_ID_CODE_HASH = 1024,
     /* Author of the last git commit, null-terminated, up to 8 bytes. */
-    CommitAuthor = 1025,
+    MESSAGE_ID_COMMIT_AUTHOR = 1025,
     /* Git username of whoever built/uploaded the firmware, null-terminated, up to 8 bytes. */
-    Uploader = 1026,
+    MESSAGE_ID_UPLOADER = 1026,
 } MessageId;
 
 typedef enum {
-    XAccel = 0,
-    YAccel = 1,
-    ZAccel = 2,
-    XRot   = 3,
-    YRot   = 4,
-    ZRot   = 5,
+    RVC_TYPE_X_ACCEL = 0,
+    RVC_TYPE_Y_ACCEL = 1,
+    RVC_TYPE_Z_ACCEL = 2,
+    RVC_TYPE_X_ROT   = 3,
+    RVC_TYPE_Y_ROT   = 4,
+    RVC_TYPE_Z_ROT   = 5,
 } RvcType;
 
 typedef struct {
@@ -117,10 +118,10 @@ typedef struct {
 } CriticalFault;
 
 typedef enum {
-    FrontLeft  = 0,
-    FrontRight = 1,
-    RearLeft   = 2,
-    RearRight  = 3,
+    TIRE_POSITION_FRONT_LEFT  = 0,
+    TIRE_POSITION_FRONT_RIGHT = 1,
+    TIRE_POSITION_REAR_LEFT   = 2,
+    TIRE_POSITION_REAR_RIGHT  = 3,
 } TirePosition;
 
 typedef struct {
@@ -136,12 +137,14 @@ typedef struct {
 } TireTemperatureMessage;
 
 typedef enum {
-    TrackFormed = 0,
-    SectorOneTime = 1,
-    SectorTwoTime = 2,
-    SectorThreeTime = 3,
-    LapTime = 4,
+    LAP_MESSAGE_TYPE_TRACK_FORMED = 0,
+    LAP_MESSAGE_TYPE_SECTOR_ONE_TIME = 1,
+    LAP_MESSAGE_TYPE_SECTOR_TWO_TIME = 2,
+    LAP_MESSAGE_TYPE_SECTOR_THREE_TIME = 3,
+    LAP_MESSAGE_TYPE_LAP_TIME = 4,
 } LapMessageType;
+
+typedef LapMessageType LapMessage;
 
 typedef struct {
     int16_t phase_a_temp;      /* 1 = 0.1C */
@@ -218,32 +221,32 @@ typedef struct {
 } MotorInternalVoltages;
 
 typedef enum {
-    VsmStart = 0,
-    PreChargeInit = 1,
-    PreChargeActive = 2,
-    PreChargeComplete = 3,
-    VsmWait = 4,
-    VsmReady = 5,
-    MotorRunning = 6,
-    BlinkFaultCode = 7,
-    ShutdownInProcess = 14,
-    RecyclePower = 15,
+    VSM_STATE_VSM_START = 0,
+    VSM_STATE_PRE_CHARGE_INIT = 1,
+    VSM_STATE_PRE_CHARGE_ACTIVE = 2,
+    VSM_STATE_PRE_CHARGE_COMPLETE = 3,
+    VSM_STATE_VSM_WAIT = 4,
+    VSM_STATE_VSM_READY = 5,
+    VSM_STATE_MOTOR_RUNNING = 6,
+    VSM_STATE_BLINK_FAULT_CODE = 7,
+    VSM_STATE_SHUTDOWN_IN_PROCESS = 14,
+    VSM_STATE_RECYCLE_POWER = 15,
 } VsmState;
 
 typedef enum {
-    PowerOn = 0,
-    Stop = 1,
-    OpenLoop = 2,
-    ClosedLoop = 3,
-    Wait = 4,
-    _Internal1 = 5,
-    _Internal2 = 6,
-    _Internal3 = 7,
-    IdleRun = 8,
-    IdleStop = 9,
-    _Internal4 = 10,
-    _Internal5 = 11,
-    _Internal6 = 12,
+    INVERTER_STATE_POWER_ON = 0,
+    INVERTER_STATE_STOP = 1,
+    INVERTER_STATE_OPEN_LOOP = 2,
+    INVERTER_STATE_CLOSED_LOOP = 3,
+    INVERTER_STATE_WAIT = 4,
+    INVERTER_STATE___INTERNAL1 = 5,
+    INVERTER_STATE___INTERNAL2 = 6,
+    INVERTER_STATE___INTERNAL3 = 7,
+    INVERTER_STATE_IDLE_RUN = 8,
+    INVERTER_STATE_IDLE_STOP = 9,
+    INVERTER_STATE___INTERNAL4 = 10,
+    INVERTER_STATE___INTERNAL5 = 11,
+    INVERTER_STATE___INTERNAL6 = 12,
 } InverterState;
 
 typedef struct {
@@ -256,31 +259,31 @@ typedef struct {
 } RelayState;
 
 typedef enum {
-    TorqueMode = 0,
-    SpeedMode = 1,
+    INVERTER_RUN_MODE_TORQUE_MODE = 0,
+    INVERTER_RUN_MODE_SPEED_MODE = 1,
 } InverterRunMode;
 
 typedef enum {
-    DischargeDisabled = 0,
-    DischargedEnabledAndWaiting = 1,
-    PerformingSpeedCheck = 2,
-    DischargeActivelyOccuring = 3,
-    DischargeCompleted = 4,
+    INVERTER_ACTIVE_DISCHARGE_STATE_DISCHARGE_DISABLED = 0,
+    INVERTER_ACTIVE_DISCHARGE_STATE_DISCHARGED_ENABLED_AND_WAITING = 1,
+    INVERTER_ACTIVE_DISCHARGE_STATE_PERFORMING_SPEED_CHECK = 2,
+    INVERTER_ACTIVE_DISCHARGE_STATE_DISCHARGE_ACTIVELY_OCCURING = 3,
+    INVERTER_ACTIVE_DISCHARGE_STATE_DISCHARGE_COMPLETED = 4,
 } InverterActiveDischargeState;
 
 typedef enum {
-    CanMode = 0,
-    VsmMode = 1,
+    INVERTER_COMMAND_MODE_CAN_MODE = 0,
+    INVERTER_COMMAND_MODE_VSM_MODE = 1,
 } InverterCommandMode;
 
 typedef enum {
-    Stall = 0,
-    HighSpeed = 1,
+    BURST_MODEL_MODE_STALL = 0,
+    BURST_MODEL_MODE_HIGH_SPEED = 1,
 } BurstModelMode;
 
 typedef enum {
-    Reverse = 0,
-    Forward = 1,
+    MOTOR_DIRECTION_REVERSE = 0,
+    MOTOR_DIRECTION_FORWARD = 1,
 } MotorDirection;
 
 typedef struct {
@@ -441,15 +444,15 @@ typedef struct {
 } MotorControlCommand;
 
 CAN_message_t empty_can_message(MessageId id, uint8_t len);
-uint16_t read_u16_le(uint8_t* buf);
-void write_u16_le(uint8_t* buf, uint16_t value);
-int16_t read_i16_le(uint8_t* buf);
-void write_i16_le(uint8_t* buf, int16_t value);
-uint32_t read_u32_le(const uint8_t* buf);
-void write_u32_le(uint8_t* buf, uint32_t value);
-float read_f32_le(uint8_t* buf);
-void write_f32_le(uint8_t* buf, float value);
-void write_u64_le(uint8_t* buf, uint64_t value);
+uint16_t read_u16_le(const uint8_t *buf);
+void write_u16_le(uint8_t *buf, uint16_t value);
+int16_t read_i16_le(const uint8_t *buf);
+void write_i16_le(uint8_t *buf, int16_t value);
+uint32_t read_u32_le(const uint8_t *buf);
+void write_u32_le(uint8_t *buf, uint32_t value);
+float read_f32_le(const uint8_t *buf);
+void write_f32_le(uint8_t *buf, float value);
+void write_u64_le(uint8_t *buf, uint64_t value);
 
 bool parse_start_switch(CAN_message_t msg);
 CAN_message_t create_start_switch(bool value);
@@ -488,5 +491,7 @@ CAN_message_t create_motor_control_command(MotorControlCommand value);
 MotorControlCommand parse_motor_control_command(CAN_message_t msg);
 
 CAN_message_t create_code_hash_message(uint64_t truncated_hash);
-CAN_message_t create_commit_author_message(const char* author);
-CAN_message_t create_uploader_message(const char* uploader);
+CAN_message_t create_commit_author_message(const char *author);
+CAN_message_t create_uploader_message(const char *uploader);
+
+#endif /* CAN_SERDE_H */

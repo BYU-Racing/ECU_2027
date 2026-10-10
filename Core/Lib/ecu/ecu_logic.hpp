@@ -6,7 +6,7 @@
 #include "constants.hpp"
 #include "CAN_message_t.h"
 #include "util.hpp"
-#include "assert.hpp"
+#include "assert.h"
 
 /* This section deals with processing the values from the pedal sensors,
  * currently the two throttle sensors and the brake sensor. It also deals with
