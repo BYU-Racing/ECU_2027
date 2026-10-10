@@ -67,6 +67,8 @@ void Error_Handler(void);
 #define Brake_Light_IO_GPIO_Port GPIOA
 #define Horn_IO_Pin GPIO_PIN_4
 #define Horn_IO_GPIO_Port GPIOA
+#define Brake_AN_Pin GPIO_PIN_5
+#define Brake_AN_GPIO_Port GPIOA
 #define Pump_PWM_Pin GPIO_PIN_6
 #define Pump_PWM_GPIO_Port GPIOA
 #define LED_1_Pin GPIO_PIN_4
