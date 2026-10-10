@@ -7,6 +7,7 @@
 #include "can_serde.hpp"
 #include "ecu_logic.hpp"
 #include "can_buses.h"
+#include "main.h"
 
 #include "stm32g4xx_hal_gpio.h"
 #include "stm32g4xx_hal_adc.h"
@@ -19,6 +20,12 @@ Ecu ECU = {};
 
 Timer broadcast_build_info_timer(0, BROADCAST_INFO_INTERVAL_MS);
 Timer debug_pacing(0, 500);
+
+/* All these timers control how often messages are emitted for each of these sensors. */
+Timer throttle1_timer(0, 30);
+Timer throttle2_timer(0, 30);
+Timer brake_timer(0, 30);
+Timer start_switch_timer(0, 30);
 
 void assert_failed_handler(AssertLevel level, LineInfo info, AssertCode error_code) {
     /* Shut everything down. */
@@ -77,9 +84,30 @@ void ecu_loop() {
 
     /* Generate all outgoing messages and send each. */
     while (true) {
+        /* Check if any sensors need to send values down the CAN bus, and
+        * if so, send them. */
+        if (throttle1_timer.shouldFire(current_time_ms)) {
+            uint16_t reading = HAL_ADC_GetValue(&hadc1);
+        }
+
+        if (throttle2_timer.shouldFire(current_time_ms)) {
+            uint16_t reading = HAL_ADC_GetValue();
+        }
+
+        // TO DO:Not sure where we are getting brake values, figure that out
+        // if (brake_timer.shouldFire(current_time_ms)) {
+        //     uint16_t reading = HAL_GPIO_ReadPin();
+        // }
+
+        if (start_switch_timer.shouldFire(current_time_ms)) {
+            bool reading = HAL_GPIO_ReadPin(SW_1_GPIO_Port, SW_1_Pin) != 0;
+        }
         std::optional<CAN_message_t> to_send = ECU.pollCan(current_time_ms);
         if (to_send.has_value()) {
-            can_bus_write(&MotorCAN, &(*to_send));
+            if (!can_bus_write(&MotorCAN, &(*to_send))){
+                // If doesn't send, queue is full
+                assert_failed_handler(AssertLevel::Safety, LineInfo{__FILE__, __LINE__}, AssertCode::BadMessage);
+            }
         } else {
             break;
         }
