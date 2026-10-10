@@ -1,21 +1,6 @@
 {
     "configurations": [
         {
-            "name": "Mac",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "/Users/gavinturley/ECU_2027/Core/**"
-            ],
-            "defines": [
-                "\"USE_HAL_DRIVER\"",
-                "\"STM32G431xx\""
-            ],
-            "compilerPath": "/usr/bin/clang",
-            "cStandard": "c17",
-            "cppStandard": "c++14",
-            "intelliSenseMode": "macos-clang-arm64"
-        },
-        {
         "name": "STM32G4",
         "includePath": [
             "${workspaceFolder}/Core/Inc",
