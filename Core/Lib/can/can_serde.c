@@ -1,5 +1,5 @@
 #include "can_serde.h"
-#include "assert.h"
+#include "../shared/assert.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
