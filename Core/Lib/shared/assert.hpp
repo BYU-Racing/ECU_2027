@@ -1,0 +1,82 @@
+#pragma once
+
+#include <cstdint>
+
+/* Assertion and panic handling code. This allows any part of the code to use assertions.
+ * What's an assertion? Let's look at an example.
+ * Say there's a temperature sensor that should never exceed 90°C.
+ * You could write code like
+ * 
+ *   uint16_t temperature = read_temperature();
+ *   SAFETY_ASSERT(temperature <= 90);
+ * 
+ * If the temperature ever reaches 91°C, it will call `assert_failed`, which runs
+ * whatever code the user has for handling failed asserts. This makes it really
+ * easy to check if values are out of range, or certain preconditions must always
+ * be met.
+ * 
+ * There's one other important thing to know: there are multiple different levels
+ * of asserts, each of which the user can choose what to do if it fails. Here are
+ * some of them:
+ *  - `AssertLevel::Soft` is for minor state checks. If a soft assert fails, it means
+ *    that nothing dangerous has happened, just some minor check failed. This will do
+ *    a soft reset of the system, where it shuts off the engine for a few seconds
+ *    before resuming as normal.
+ *  - `AssertLevel::Safety` is for safety-critical checks. If a safety assert fails
+ *    the car goes into a unrecoverable shutdown, and the whole thing will need to
+ *    be reset.
+ *  */
+
+
+/* Error codes for safety asserts */
+enum class AssertCode: uint8_t {
+    /* Note we have no value set to 0; this is intentional.
+     * Our current screen uses 0 as the default error code value,
+     * so it needs to have 0 as nothing wrong. */
+    Unknown = 1,
+    BadMessage = 2,
+    IntegerOverflow = 3,
+    /* Codes 3-20 are reserved for future general messages. */
+    BrakeAndThrottlePressed = 20,
+    ThrottleOutOfRange = 21,
+    ThrottleSensorsDiverged = 22,
+    /* If it's been too long since we've received a pedal value, we panic.
+     * T.4.2.11(b) 2026 rules */
+    PedalTimeout = 23,
+};
+
+/* Captures the filename and file. I wish I could do this without a macro,
+ * but there's no other way to capture the line number without a macro,
+ * since we don't have stack traces. */
+struct LineInfo {
+    const char* filename;
+    int line_no;
+};
+
+#define CAPTURE_LINE_INFO() (LineInfo{ __FILE__, __LINE__ })
+
+/* Allows for soft assertion, for things that aren't safety-critical, but should
+ * be noted. These are elevated to safety asserts in production builds. */
+enum class AssertLevel {
+    Soft,
+    Safety,
+};
+
+/* This is the function type for the panic handler. */
+typedef void (*assert_failed_handler_t)(AssertLevel level, LineInfo line_info, AssertCode error_code);
+
+/* Call this to set what the code should do if an assertion fails. */
+void register_assert_failed_handler(assert_failed_handler_t handler);
+
+/* Calls the registered assert failure handler. */
+void assert_failed(AssertLevel level, LineInfo line_info, AssertCode error_code);
+
+#define GENERIC_ASSERT(level, condition, code) \
+    do { \
+        if (!(condition)) { \
+            assert_failed((level), CAPTURE_LINE_INFO(), (code)); \
+        } \
+    } while (0)
+
+#define SOFT_ASSERT(condition, code)   GENERIC_ASSERT(AssertLevel::Soft, (condition), (code))
+#define SAFETY_ASSERT(condition, code) GENERIC_ASSERT(AssertLevel::Safety, (condition), (code))

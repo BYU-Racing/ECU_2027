@@ -1,0 +1,7 @@
+/Users/gavinturley/ECU_2027/build/Debug/CMakeFiles/ECU2027.dir
+/Users/gavinturley/ECU_2027/build/Debug/CMakeFiles/edit_cache.dir
+/Users/gavinturley/ECU_2027/build/Debug/CMakeFiles/rebuild_cache.dir
+/Users/gavinturley/ECU_2027/build/Debug/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
+/Users/gavinturley/ECU_2027/build/Debug/cmake/stm32cubemx/CMakeFiles/FreeRTOS.dir
+/Users/gavinturley/ECU_2027/build/Debug/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+/Users/gavinturley/ECU_2027/build/Debug/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir

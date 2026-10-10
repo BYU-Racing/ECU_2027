@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/gavinturley/ECU_2027/build/Debug/cmake_install.cmake",
+		"/Users/gavinturley/ECU_2027/build/Debug/cmake/stm32cubemx/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

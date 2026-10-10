@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "can_buses.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -114,7 +114,7 @@ int main(void)
   MX_FDCAN3_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-
+  can_buses_init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -160,6 +160,16 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    can_bus_service(&DataCAN);
+    can_bus_service(&MotorCAN);
+
+    CAN_message_t msg;
+    while (can_bus_read(&DataCAN, &msg))  {
+       /* handle DataCAN message */ 
+      }
+    while (can_bus_read(&MotorCAN, &msg)) {
+       /* handle MotorCAN message */ 
+      }
   }
   /* USER CODE END 3 */
 }

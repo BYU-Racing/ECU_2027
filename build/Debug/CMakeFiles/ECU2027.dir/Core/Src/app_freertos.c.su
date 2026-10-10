@@ -1,0 +1,2 @@
+/Users/gavinturley/ECU_2027/Core/Src/app_freertos.c:60:6:vApplicationStackOverflowHook	16	static
+/Users/gavinturley/ECU_2027/Core/Src/app_freertos.c:69:6:vApplicationMallocFailedHook	4	static

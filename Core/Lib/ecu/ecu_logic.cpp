@@ -1,0 +1,365 @@
+#include "ecu_logic.hpp"
+
+#include <string.h>
+
+#include <cmath>
+
+#include "assert.hpp"
+#include "can_serde.hpp"
+#include "constants.hpp"
+
+/* Currently a stub. Implement the torque mapping here. Returns in Nm, _not_ 0.1*Nm */
+static double map_throttle_to_torque(uint16_t throttle_percent) {
+    int64_t result = map(throttle_percent, 0, 100, 0, MAX_TORQUE);
+    return static_cast<double>(result) / 10.0;
+}
+
+void Pedals::poll(uint32_t current_time_ms) {
+    /* Save the current implausibility value, before we clear
+     * `this->implausibility`. This lets us see if the implausibility is still
+     * happening. This works because if we clear the implausibility, and get a
+     * new implausibility, it means the implausibility hasn't stopped. */
+    auto last_implausibility = this->implausibility;
+    this->implausibility = std::nullopt;
+
+    /* According to the 2026 rules (section T.4.2.11(b)), if a message hasn't
+     * been received since a certain amount of time, we need to panic. The
+     * following code handles this timeout scenario. */
+
+    /* We proactively start these triggers, but cancel them when we receive
+     * a message (see `inputThrottleOnePosition` for example). */
+    this->too_long_since_throttle_1.startIfStopped(current_time_ms, PEDAL_TIMEOUT_MS);
+    this->too_long_since_throttle_2.startIfStopped(current_time_ms, PEDAL_TIMEOUT_MS);
+    this->too_long_since_brake.startIfStopped(current_time_ms, PEDAL_TIMEOUT_MS);
+
+    if (this->too_long_since_throttle_1.triggerReached(current_time_ms)) {
+        SAFETY_ASSERT(false, AssertCode::PedalTimeout);
+    }
+    if (this->too_long_since_throttle_2.triggerReached(current_time_ms)) {
+        SAFETY_ASSERT(false, AssertCode::PedalTimeout);
+    }
+    if (this->too_long_since_brake.triggerReached(current_time_ms)) {
+        SAFETY_ASSERT(false, AssertCode::PedalTimeout);
+    }
+
+    if (this->implausibility.has_value()) {
+        if (last_implausibility.has_value()) {
+            /* Restore the original implausibility information, so we have
+            * both the time and information that the first implausibility
+            * happened at. */
+           this->implausibility = *last_implausibility;
+        }
+
+        ImplausibilityDetails details = *this->implausibility;
+
+        /* Use this to panic if an implausibility has occured for too long. */
+        if (current_time_ms - details.happened_at_ms > ALLOWED_IMPLAUSILIBTY_LENGTH_MS) {
+            /* Because we tracked the original file and error number, we report
+             * those details, instead of the current line. */
+            assert_failed(AssertLevel::Safety, details.line_info, details.code);
+        }
+    }
+
+    this->smoothThrottle(current_time_ms);
+
+    this->throttlePostProcessing(current_time_ms);
+}
+
+void Pedals::inputThrottleOnePosition(uint32_t current_time_ms, uint16_t value) {
+    this->throttle_1_pos = value;
+    /* Reset the timeout for receiving a message. */
+    this->too_long_since_throttle_1.cancel();
+    this->maybeRecomputeMappedThrottle(current_time_ms);
+}
+
+void Pedals::inputThrottleTwoPosition(uint32_t current_time_ms, uint16_t value) {
+    this->throttle_2_pos = value;
+    this->too_long_since_throttle_2.cancel();
+    this->maybeRecomputeMappedThrottle(current_time_ms);
+}
+
+void Pedals::inputBrakePosition(uint32_t current_time_ms, uint16_t position) {
+    /* This argument isn't strictly necessary, but we may use it in the future
+     * (the (void) just keeps the compiler from complaining). */
+    (void)current_time_ms;
+
+    this->brake_pos = position;
+    this->too_long_since_brake.cancel();
+}
+
+uint8_t Pedals::getThrottleValue() {
+    return this->smoothed_throttle;
+}
+
+bool Pedals::isBrakePressed() {
+    return this->brake_pos >= BRAKE_CONSIDERED_PRESSED;
+}
+
+int16_t Pedals::getCurrentTorqueAmount() {
+    double cascadia_format = this->pid_output * 10.0;
+    /* The PID may undershoot, so we clamp it if it gets below 0. */
+    if (cascadia_format < 0.0) cascadia_format = 0.0;
+    if (cascadia_format > static_cast<double>(MAX_TORQUE)) {
+        cascadia_format = static_cast<double>(MAX_TORQUE);
+    }
+
+    SAFETY_ASSERT(cascadia_format <= INT16_MAX, AssertCode::IntegerOverflow);
+    return static_cast<int16_t>(cascadia_format);
+}
+
+void Pedals::maybeRecomputeMappedThrottle(uint32_t current_time_ms) {
+    if (this->throttle_1_pos.has_value() && this->throttle_2_pos.has_value()) {
+        uint16_t throttle1 = *this->throttle_1_pos;
+        uint16_t throttle2 = *this->throttle_2_pos;
+
+        /* Make sure the throttle values are in range. */
+        if (this->throttle_1_pos < THROTTLE1_MIN_OUT_OF_RANGE) {
+            /* This is a garbage value, so we really shouldn't use it.
+            * Hence, we'll return early so the rest of the code in
+            * this function doesn't run. */
+            this->noteImplausibility(current_time_ms, CAPTURE_LINE_INFO(), AssertCode::ThrottleOutOfRange);
+            return;
+        }
+        if (this->throttle_1_pos > THROTTLE1_MAX_OUT_OF_RANGE) {
+            this->noteImplausibility(current_time_ms, CAPTURE_LINE_INFO(), AssertCode::ThrottleOutOfRange);
+            return;
+        }
+        if (this->throttle_2_pos < THROTTLE2_MIN_OUT_OF_RANGE) {
+            this->noteImplausibility(current_time_ms, CAPTURE_LINE_INFO(), AssertCode::ThrottleOutOfRange);
+            return;
+        }
+        if (this->throttle_2_pos > THROTTLE2_MAX_OUT_OF_RANGE) {
+            this->noteImplausibility(current_time_ms, CAPTURE_LINE_INFO(), AssertCode::ThrottleOutOfRange);
+            return;
+        }
+
+        int64_t throttle_1_percent = map(throttle1, THROTTLE1_LOW, THROTTLE1_HIGH, 0, 100);
+        int64_t throttle_2_percent = map(throttle2, THROTTLE2_LOW, THROTTLE2_HIGH, 0, 100);
+
+        /* Throttle values may go slightly below 0 or above 100, so we'll
+         * just saturate at those values (if it's significantly out of
+         * range, the preconditions of this block will return early). */
+        if (throttle_1_percent < 0) throttle_1_percent = 0;
+        if (throttle_1_percent > 100) throttle_1_percent = 100;
+        if (throttle_2_percent < 0) throttle_2_percent = 0;
+        if (throttle_2_percent > 100) throttle_2_percent = 100;
+
+        /* Make sure the two throttle values haven't diverged too far. */
+        if (abs(throttle_1_percent - throttle_2_percent) >= THROTTLE_DISAGREE) {
+            this->noteImplausibility(current_time_ms, CAPTURE_LINE_INFO(), AssertCode::ThrottleSensorsDiverged);
+            return;
+        }
+
+        int64_t average = (throttle_1_percent + throttle_2_percent) / 2;
+        this->mapped_throttle = average;
+    }
+}
+
+void Pedals::smoothThrottle(uint32_t current_time_ms) {
+    constexpr size_t torque_memory_len = sizeof(this->torque_memory) / sizeof(this->torque_memory[0]);
+
+    if (this->torque_memory_pacing.shouldFire(current_time_ms)) {
+        /* Only cycle memory when it's been long enough. */
+
+        /* Cycle through last torque values. */
+        for (size_t i = torque_memory_len - 1; i >= 1; i--) {
+            this->torque_memory[i] = this->torque_memory[i - 1];
+        }
+
+        this->torque_memory[0] = this->mapped_throttle;
+    }
+
+    uint32_t total_torque = 0;
+    /* Sum up history. */
+    for (size_t i = 0; i < torque_memory_len; i++) {
+        total_torque += torque_memory[i];
+    }
+
+    uint8_t averaged = static_cast<uint8_t>(total_torque / torque_memory_len);
+    SAFETY_ASSERT(averaged >= 0, AssertCode::IntegerOverflow);
+
+    this->smoothed_throttle = averaged;
+}
+
+void Pedals::throttlePostProcessing(uint32_t current_time_ms) {
+    if (this->pid_pacing.shouldFire(current_time_ms)) {
+        double torque_target = map_throttle_to_torque(this->smoothed_throttle);
+
+        this->pid_output = this->throttle_pid.nextValue(current_time_ms, torque_target, this->last_output);
+        this->last_output = this->pid_output;
+    }
+}
+
+/* This records that an implausibility happened. We don't immediately panic when
+ * an implausibility occurs, as the rules allow us to tolerate an implausibility
+ * for up to 100 ms (2026 rules, section T.4.2.5). */
+void Pedals::noteImplausibility(uint32_t current_time_ms, LineInfo line_info, AssertCode code) {
+    ImplausibilityDetails details;
+    details.happened_at_ms = current_time_ms;
+    details.line_info = line_info;
+    details.code = code;
+    this->implausibility = details;
+}
+
+void Pedals::printState() {
+    PRINTF("Pedals:\n");
+    if (this->throttle_1_pos.has_value()) {
+        PRINTF("  throttle_1_pos: %u\n", *this->throttle_1_pos);
+    } else {
+        PRINTF("  throttle_1_pos: (none)\n");
+    }
+    if (this->throttle_2_pos.has_value()) {
+        PRINTF("  throttle_2_pos: %u\n", *this->throttle_2_pos);
+    } else {
+        PRINTF("  throttle_2_pos: (none)\n");
+    }
+    PRINTF("  mapped_throttle: %u\n", this->mapped_throttle);
+    PRINTF("  smoothed_throttle: %u\n", this->smoothed_throttle);
+    PRINTF("  brake_pos: %u\n", this->brake_pos);
+    PRINTF("  implausibility: %s\n", this->implausibility.has_value() ? "yes" : "no");
+}
+
+/* Ecu implementation. */
+void Ecu::printState() {
+    PRINTF("Ecu:\n");
+    PRINTF("  car_fully_on: %s\n", this->car_fully_on ? "yes" : "no");
+    PRINTF("  start_switch_on: %s\n", this->start_switch_on ? "yes" : "no");
+    PRINTF("  precharge_complete: %s\n", this->precharge_complete ? "yes" : "no");
+    this->pedals.printState();
+}
+
+void Ecu::handleStartupSequence(uint32_t current_time_ms) {
+    bool car_fully_on_before = this->car_fully_on;
+
+    /* Car startup sequence. */
+    if (this->car_fully_on) {
+        /* No need to do the motor startup sequence if the car is already fully started. */
+    } else {
+        /* Startup sequence needed. In order to start up the motor, we need three things:
+         *   1. The brake needs to be down.
+         *   2. The start switch needs to be on.
+         *   3. Inverter has reached Pre-charge Complete state (3)
+         * Once these preconditions are met, we can do the startup sequence.
+         * We will also wait two seconds before fully starting up, or abort if
+         * one of the preconditions stops holding. */
+
+        if (this->pedals.isBrakePressed() && this->start_switch_on && this->precharge_complete) {
+            if (!this->startup_countdown.started()) {
+                this->startup_countdown.start(current_time_ms, STARTUP_DELAY_MS);
+            } else if (this->startup_countdown.triggerReached(current_time_ms)) {
+                /* Good to go! */
+                this->car_fully_on = true;
+            }
+        } else {
+            /* One of the preconditions failed, so we need to reset the timer. */
+            this->startup_countdown.cancel();
+        }
+    }
+
+    if (!this->start_switch_on) {
+        /* Pretty self-explanatory: if the start switch turns off, the car turns off. */
+        this->car_fully_on = false;
+    }
+
+    if (!car_fully_on_before && this->car_fully_on) {
+        /* We just went from the car from being off to being on. This means that 
+         * we now need to sound the horn for 2 seconds. */
+        this->horn_on = true;
+        this->horn_off_trigger.start(current_time_ms, 2000);
+    }
+
+    /* Turn the horn off afterwards. */
+    if (this->horn_off_trigger.triggerReached(current_time_ms)) {
+        this->horn_on = false;
+    }
+}
+
+void Ecu::processMessage(uint32_t current_time_ms, CAN_message_t msg) {
+    /* If we received a CAN message, update the corresponding value. */
+    switch (static_cast<MessageId>(msg.id)) {
+        case MessageId::StartSwitch:
+            this->start_switch_on = parse_start_switch(msg);
+            break;
+        // To check VSM internal state
+        case MessageId::InternalStates: {
+            VsmState vsm_state = parse_motor_internal_states(msg).vsm_state;
+            /* if the vsm state changes then update precharge_complete boolean */
+            if (vsm_state == VsmState::PreChargeComplete || vsm_state == VsmState::VsmWait
+                || vsm_state == VsmState::VsmReady || vsm_state == VsmState::MotorRunning) {
+                this->precharge_complete = true;
+            } else {
+                this->precharge_complete = false;
+            }
+            break;
+        }
+        case MessageId::ThrottleOnePosition:
+            this->pedals.inputThrottleOnePosition(current_time_ms, parse_throttle_one_position(msg));
+            break;
+        case MessageId::ThrottleTwoPosition:
+            this->pedals.inputThrottleTwoPosition(current_time_ms, parse_throttle_two_position(msg));
+            break;
+        case MessageId::BrakePressure:
+            this->pedals.inputBrakePosition(current_time_ms, parse_brake_pressure(msg));
+            this->brake_light_on = this->pedals.isBrakePressed();
+            break;
+        default:
+            break;
+    }
+};
+
+GpioState Ecu::pollGpioState(uint32_t current_time_ms) {
+    GpioState result;
+    result.horn_on = this->horn_on;
+    result.brake_light_on = this->brake_light_on;
+    return result;
+}
+
+std::optional<CAN_message_t> Ecu::pollCan(uint32_t current_time_ms) {
+    this->handleStartupSequence(current_time_ms);
+    this->pedals.poll(current_time_ms);
+
+    /* Engine is enabled if all the preconditions of `car_fully_on` passed,
+     * and if the brake is up. We don't enable the inverter until the
+     * driver has lifted up the brake. */
+
+    if (this->throttle_and_brake_pressed) {
+        /* The driver previously pressed the throttle and brake at the same time, so this is
+        * the code that deals with potentially re-enabling once the throttle is low
+        * enough again. */
+       if (this->pedals.getThrottleValue() <= 5 && !this->pedals.isBrakePressed()) {
+           this->throttle_and_brake_pressed = false;
+        }
+    }
+    /* Brake and throttle cannot be pressed at the same time. See the 2026 rules, EV.4.7. */
+    if (this->pedals.getThrottleValue() >= 25 && this->pedals.isBrakePressed()) {
+        this->throttle_and_brake_pressed = true;
+    }
+
+    bool inverter_enabled = false;
+    int16_t torque_to_use = 0;
+
+    if (this->car_fully_on && !this->throttle_and_brake_pressed) {
+        inverter_enabled = true;
+        torque_to_use = this->pedals.getCurrentTorqueAmount();
+    }
+
+    /* Pace how often we send a motor command by using a timer. Note, we still
+     * send these messages, even when the inverter is off, so that the motor
+     * gets shutdown messages. */
+    /* ALSO check inverter state and only send motor command once pre-charge is complete */
+    if (this->motor_control_pacing.shouldFire(current_time_ms)) {
+        MotorControlCommand cmd;
+        cmd.torque = torque_to_use;
+        cmd.speed = 0;
+        cmd.direction = MotorDirection::Forward;
+        cmd.enable_inverter = inverter_enabled;
+        cmd.inverter_discharge = false;
+        cmd.override_speed = false;
+        cmd.torque_limit = 0;
+
+        return create_motor_control_command(cmd);
+    }
+
+    /* No message was generated, so let the caller know the don't need to keep sending messages. */
+    return std::nullopt;
+}

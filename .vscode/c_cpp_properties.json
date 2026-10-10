@@ -1,0 +1,39 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/Users/gavinturley/ECU_2027/Core/**"
+            ],
+            "defines": [
+                "\"USE_HAL_DRIVER\"",
+                "\"STM32G431xx\""
+            ],
+            "compilerPath": "/usr/bin/clang",
+            "cStandard": "c17",
+            "cppStandard": "c++14",
+            "intelliSenseMode": "macos-clang-arm64"
+        },
+        {
+        "name": "STM32G4",
+        "includePath": [
+            "${workspaceFolder}/Core/Inc",
+            "${workspaceFolder}/Core/Lib/**",
+            "${workspaceFolder}/Drivers/STM32G4xx_HAL_Driver/Inc",
+            "${workspaceFolder}/Drivers/STM32G4xx_HAL_Driver/Inc/Legacy",
+            "${workspaceFolder}/Drivers/CMSIS/Device/ST/STM32G4xx/Include",
+            "${workspaceFolder}/Drivers/CMSIS/Include",
+            "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/include",
+            "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2",
+            "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F"
+        ],
+        "defines": ["USE_HAL_DRIVER", "STM32G474xx"],
+        "compilerPath": "/opt/homebrew/bin/arm-none-eabi-gcc",
+        "intelliSenseMode": "gcc-arm",
+        "cStandard": "c11",
+        "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}
