@@ -3,7 +3,6 @@
 #include <setjmp.h>
 
 #include "assert.h"
-#include "util.hpp"
 #include "util.h"
 #include "can_serde.h"
 #include "ecu_logic.hpp"
