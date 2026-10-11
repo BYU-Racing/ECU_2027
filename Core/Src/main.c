@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "can_buses.h"
+#include "../Lib/can/can_buses.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/

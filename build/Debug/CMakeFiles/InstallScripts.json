@@ -1,8 +1,8 @@
 {
 	"InstallScripts" : 
 	[
-		"C:/Users/77tur/source/repos/ECU_2027-1/build/Debug/cmake_install.cmake",
-		"C:/Users/77tur/source/repos/ECU_2027-1/build/Debug/cmake/stm32cubemx/cmake_install.cmake"
+		"/Users/gavinturley/ECU_2027/build/Debug/cmake_install.cmake",
+		"/Users/gavinturley/ECU_2027/build/Debug/cmake/stm32cubemx/cmake_install.cmake"
 	],
 	"Parallel" : false
 }
