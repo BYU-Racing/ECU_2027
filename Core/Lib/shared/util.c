@@ -71,50 +71,41 @@ uint16_t adc_convert_to_voltage(uint16_t raw_value) {
 }
 
 // Trigger
-static bool trigger_active;
-static uint32_t trigger_started_at;
-static uint32_t trigger_target_duration;
-
-void trigger_start(uint32_t current_time_ms, uint32_t target_duration) {
-    trigger_started_at = current_time_ms;
-    trigger_target_duration = target_duration;
-    trigger_active = true;
+void trigger_start(Trigger *trigger, uint32_t current_time_ms, uint32_t target_duration){
+    trigger->target_duration = target_duration;
+    trigger->started_at = current_time_ms;
+    trigger->active = true;
 }
 
-void trigger_start_if_stopped(uint32_t current_time_ms, uint32_t target_duration) {
-    if (!trigger_active) {
-        trigger_start(current_time_ms, target_duration);
+void trigger_start_if_stopped(Trigger *trigger, uint32_t current_time_ms, uint32_t target_duration) {
+    if (!trigger->active) {
+        trigger_start(trigger, current_time_ms, target_duration);
     }
 }
 
-bool trigger_started(void) {
-    return trigger_active;
+bool trigger_started(const Trigger *trigger) {
+    return trigger->active;
 }
 
 /* Makes it so the next time trigger_reached is called, it returns true. */
-void prime_trigger(uint32_t current_time_ms) {
-    trigger_started_at = current_time_ms;
-    trigger_target_duration = 0;
-    trigger_active = true;
+void prime_trigger(Trigger *trigger, uint32_t current_time_ms) {
+    trigger_start(trigger, current_time_ms, 0);
 }
 
-bool trigger_reached(uint32_t current_time_ms) {
-   if (!trigger_active) {
+bool trigger_reached(Trigger *trigger, uint32_t current_time_ms) {
+   if (!trigger->active) {
         return false;
     }
-    if ((current_time_ms - trigger_started_at) >= trigger_target_duration){      
+    if ((current_time_ms - trigger->started_at) >= trigger->target_duration){      
         /* Reset the trigger, so that trigger_started is false. */
-        trigger_started_at = 0;
-        trigger_active = false;
+        trigger->active = false;
         return true;
-    } else {
-        return false;
     }
+    return false;
 }
 
-void trigger_cancel(void) {
-    trigger_started_at = 0;
-    trigger_active = false;
+void trigger_cancel(Trigger *trigger) {
+    trigger->active = false;
 }
 
 

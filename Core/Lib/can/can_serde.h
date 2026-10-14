@@ -4,7 +4,7 @@
 #ifndef CAN_SERDE_H
 #define CAN_SERDE_H
 
-#include "assert.h"
+#include "../shared/ecu_assert.h"
 #include "CAN_message_t.h"
 #include <stdint.h>
 #include <stdbool.h>

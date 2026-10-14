@@ -16,12 +16,17 @@ uint16_t adc_convert_to_percent(uint16_t raw_value);
 uint16_t adc_convert_to_voltage(uint16_t raw_value);
 
 // Triggers
-void trigger_start(uint32_t current_time_ms, uint32_t target_duration);
-void trigger_start_if_stopped(uint32_t current_time_ms, uint32_t target_duration);
-bool trigger_started(void);
-void prime_trigger(uint32_t current_time_ms);
-bool trigger_reached(uint32_t current_time_ms);
-void trigger_cancel(void);
+typedef struct {
+    bool     active;
+    uint32_t started_at;
+    uint32_t target_duration;
+} Trigger;
+void trigger_start(Trigger *trigger, uint32_t current_time_ms, uint32_t target_duration);
+void trigger_start_if_stopped(Trigger *trigger, uint32_t current_time_ms, uint32_t target_duration);
+bool trigger_started(const Trigger *trigger);
+void prime_trigger(Trigger *trigger, uint32_t current_time_ms);
+bool trigger_reached(Trigger *trigger, uint32_t current_time_ms);
+void trigger_cancel(Trigger *trigger);
 
 // Timer
 typedef struct {
