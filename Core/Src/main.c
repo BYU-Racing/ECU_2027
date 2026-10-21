@@ -21,7 +21,14 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "can_buses.h"
+#include "../Lib/shared/ecu_assert.h"
+#include "../Lib/shared/util.h"
+
+#include "../Lib/ecu/constants.h"
+#include "../Lib/ecu/ecu_logic.h"
+
+#include "../Lib/can/can_buses.h"
+#include "../Lib/can/can_serde.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,6 +38,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define POLLING_SENSORS_INTERVAL_MS 30
 
 /* USER CODE END PD */
 
@@ -68,7 +76,12 @@ static void MX_ADC2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+// Initializes the assert handler to catch errors
+static void ecu_assert_handler(AssertLevel level, LineInfo line_info, AssertCode error_code) {
+        (void)level;
+        (void)line_info;
+        (void)error_code;
+    }
 /* USER CODE END 0 */
 
 /**
@@ -79,7 +92,14 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+  Timer broadcast_build_info_timer = { .last_fired_at = 0, .duration_ms = BROADCAST_INFO_INTERVAL_MS };
+  Timer debug_pacing = { .last_fired_at = 0, .duration_ms = 500 };
 
+  /* All these timers control how often messages are emitted for each of these sensors. */
+  Timer throttle1_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
+  Timer throttle2_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
+  Timer brake_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
+  Timer start_switch_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -88,7 +108,17 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+  // First things first, register the panic handler. If something goes
+  // wrong during setup, we'll wind everything down.
+  ecu_register_assert_failed_handler(ecu_assert_handler);
 
+
+  // TO DO: Get serial connection working for debugging.
+  // Serial.begin(SERIAL_BAUD_RATE);
+
+  // Serial.println("============================================");
+  // Serial.println("==========Motor CAN initialized=============");
+  // Serial.println("============================================");
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -113,7 +143,6 @@ int main(void)
   if (!adc_inputs_start()) { 
     Error_Handler(); 
   }
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -123,16 +152,59 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    can_bus_service(&DataCAN);
-    can_bus_service(&MotorCAN);
+    /* The ECU does not keep track of what time it is, nor does it use `millis`,
+      * so we always have to tell it what time it is. */
+    uint32_t current_time_ms = HAL_GetTick();
+    
+    CAN_message_t rmsg;
+    if (can_bus_read(&MotorCAN, &rmsg)) {
+        ecu_process_message(current_time_ms, rmsg);
+    }
 
-    CAN_message_t msg;
-    while (can_bus_read(&DataCAN, &msg))  {
-       /* handle DataCAN message */ 
-      }
-    while (can_bus_read(&MotorCAN, &msg)) {
-       /* handle MotorCAN message */ 
-      }
+    /* Check if any sensors need to send values down the CAN bus, and
+    * if so, send them. */
+    if (timer_should_fire(&throttle1_timer, current_time_ms)) {
+        uint16_t reading = read_throttle_1();
+    }
+
+    if (timer_should_fire(&throttle1_timer, current_time_ms)) {
+        uint16_t reading = read_throttle_2();
+    }
+
+    if (timer_should_fire(&throttle1_timer, current_time_ms)) {
+        uint16_t reading = read_brake();
+    }
+
+    if (timer_should_fire(&start_switch_timer, current_time_ms)) {
+        bool reading = HAL_GPIO_ReadPin(SW_1_GPIO_Port, SW_1_Pin);
+    }
+
+    /* Generate all outgoing messages and send each. */
+    while (true) {
+      CAN_message_t *to_send;
+      if (ecu_poll_can(current_time_ms, &to_send)){
+        if (!can_bus_write(&MotorCAN, &to_send)){
+          LineInfo line_info = {__FILE__, __LINE__};
+          ecu_assert_failed(ASSERT_LEVEL_SAFETY, line_info, ASSERT_CODE_BAD_MESSAGE);
+        }
+      } 
+    }
+
+    auto state = ecu_poll_gpio_state(current_time_ms);
+    HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, state.horn_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(Brake_AN_GPIO_Port, Brake_Light_IO_Pin, state.brake_light_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+
+    // TO DO: Added to broadcast who flashed code to the ECU. Currently doens't work.
+    // if (broadcast_build_info_timer.shouldFire(current_time_ms)) {
+    //     can_bus_write(&MotorCAN, &create_code_hash_message(GIT_COMMIT_HASH_U64));
+    //     can_bus_write(&MotorCAN, &create_commit_author_message(GIT_COMMIT_AUTHOR));
+    //     can_bus_write(&MotorCAN, &create_uploader_message(GIT_UPLOADER));
+    // }
+
+    // TO DO: figure out printing for print states
+    // if (timer_should_fire(&debug_pacing, current_time_ms)) {
+    //     ecu_print_state();
+    // }
   }
   /* USER CODE END 3 */
 }

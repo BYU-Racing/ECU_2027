@@ -4,8 +4,8 @@
  * Assertions call the registered failure handler when their condition is false.
  * The handler decides how to respond to soft and safety-critical failures.
  */
-#ifndef PROJECT_ASSERT_H
-#define PROJECT_ASSERT_H
+#ifndef ECU_ASSERT_H
+#define ECU_ASSERT_H
 
 #include <stdint.h>
 
@@ -17,7 +17,7 @@
  *   uint16_t temperature = read_temperature();
  *   SAFETY_ASSERT(temperature <= 90);
  * 
- * If the temperature ever reaches 91°C, it will call `assert_failed`, which runs
+ * If the temperature ever reaches 91°C, it will call `ecu_assert_failed`, which runs
  * whatever code the user has for handling failed asserts. This makes it really
  * easy to check if values are out of range, or certain preconditions must always
  * be met.
@@ -33,21 +33,6 @@
  *    the car goes into a unrecoverable shutdown, and the whole thing will need to
  *    be reset.
  *  */
-
-/* Error codes for safety assertions.
- * Zero is intentionally unused because it represents "no error" on the screen.
- */
-typedef enum {
-    ASSERT_CODE_UNKNOWN = 1,
-    ASSERT_CODE_BAD_MESSAGE = 2,
-    ASSERT_CODE_INTEGER_OVERFLOW = 3,
-    /* Codes 3-20 are reserved for future general messages. */
-    ASSERT_CODE_BRAKE_AND_THROTTLE_PRESSED = 20,
-    ASSERT_CODE_THROTTLE_OUT_OF_RANGE = 21,
-    ASSERT_CODE_THROTTLE_SENSORS_DIVERGED = 22,
-    /* T.4.2.11(b), 2026 rules. */
-    ASSERT_CODE_PEDAL_TIMEOUT = 23
-} AssertCode;
 
 /* Captures the filename and line number of the assertion call. */
 typedef struct {
@@ -65,27 +50,39 @@ typedef enum {
     ASSERT_LEVEL_SAFETY = 1
 } AssertLevel;
 
+/* Error codes for safety assertions.
+ * Zero is intentionally unused because it represents "no error" on the screen.
+ */
+typedef enum {
+    ASSERT_CODE_UNKNOWN = 1,
+    ASSERT_CODE_BAD_MESSAGE = 2,
+    ASSERT_CODE_INTEGER_OVERFLOW = 3,
+    ASSERT_CODE_HAL_PARAM = 4,
+    /* Codes 5-20 are reserved for future general messages. */
+    ASSERT_CODE_BRAKE_AND_THROTTLE_PRESSED = 20,
+    ASSERT_CODE_THROTTLE_OUT_OF_RANGE = 21,
+    ASSERT_CODE_THROTTLE_SENSORS_DIVERGED = 22,
+    /* T.4.2.11(b), 2026 rules. */
+    ASSERT_CODE_PEDAL_TIMEOUT = 23
+} AssertCode;
+
 /* Function type for the assertion failure handler. */
-typedef void (*assert_failed_handler_t)(
+typedef void (*ecu_assert_failed_handler_t)(
     AssertLevel level,
     LineInfo line_info,
     AssertCode error_code
 );
 
 /* Register the function called when an assertion fails. */
-void register_assert_failed_handler(assert_failed_handler_t handler);
+void ecu_register_assert_failed_handler(ecu_assert_failed_handler_t handler);
 
 /* Call the registered handler, if one has been registered. */
-void assert_failed(
-    AssertLevel level,
-    LineInfo line_info,
-    AssertCode error_code
-);
+void ecu_assert_failed(AssertLevel level, LineInfo line_info, AssertCode error_code);
 
 #define GENERIC_ASSERT(level, condition, code) \
     do { \
         if (!(condition)) { \
-            assert_failed((level), CAPTURE_LINE_INFO(), (code)); \
+            ecu_assert_failed((level), CAPTURE_LINE_INFO(), (code)); \
         } \
     } while (0)
 
@@ -95,4 +92,4 @@ void assert_failed(
 #define SAFETY_ASSERT(condition, code) \
     GENERIC_ASSERT(ASSERT_LEVEL_SAFETY, (condition), (code))
 
-#endif /* PROJECT_ASSERT_H */
+#endif /* ECU_ASSERT_H */
