@@ -348,7 +348,7 @@ MotorInternalVoltages parse_motor_internal_voltages(CAN_message_t msg) {
 
 MotorInternalStates parse_motor_internal_states(CAN_message_t msg) {
     /* We use the cast to extract the CAN message id from its name. */
-    SAFETY_ASSERT(msg.id == (uint32_t)(MESSAGE_ID_INTERNAL_STATES), ASSERT_CODE_BAD_MESSAGE);
+    SAFETY_ASSERT(msg.id == (uint32_t)(MESSAGE_ID_INTERNAL_STATES) && msg.len == 8, ASSERT_CODE_BAD_MESSAGE);
 
     MotorInternalStates result;
 
@@ -384,7 +384,9 @@ MotorInternalStates parse_motor_internal_states(CAN_message_t msg) {
     /* FIXME this assert may be too strong, as the docs state that
      * "All other states are reserved for future use." May be better
      * to provide a default if it's out of range. */
-    SAFETY_ASSERT(inverter_active_discharge_state <= 4, ASSERT_CODE_BAD_MESSAGE);
+    if (inverter_active_discharge_state > 4) {
+        inverter_active_discharge_state = 0;
+    }
     result.inverter_active_discharge_state =
         (InverterActiveDischargeState)(inverter_active_discharge_state);
 
@@ -565,7 +567,7 @@ CAN_message_t create_critical_fault_command(CriticalFault value) {
     CAN_message_t new_message = empty_can_message(MESSAGE_ID_FAULT, 8);
 
     new_message.buf[0] = (uint8_t)(value.error_code);
-    write_i16_le(&new_message.buf[1], value.assert_failure_line);
+    write_u16_le(&new_message.buf[1], value.assert_failure_line);
     write_u32_le(&new_message.buf[4], value.file_name_hash);
 
     return new_message;
@@ -604,6 +606,9 @@ CAN_message_t create_code_hash_message(uint64_t truncated_hash) {
 static CAN_message_t create_string_message(MessageId id, const char *str) {
     CAN_message_t msg = empty_can_message(id, 8);
     for (uint8_t i = 0; i < 8; i++) {
+        if (str == NULL) {
+            return msg; 
+        }
         msg.buf[i] = str[i];
         if (str[i] == '\0') break;
     }

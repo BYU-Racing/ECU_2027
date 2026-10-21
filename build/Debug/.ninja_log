@@ -73,4 +73,12 @@
 209	412	1791851513136638454	cmake/stm32cubemx/CMakeFiles/FreeRTOS.dir/__/__/Middlewares/Third_Party/FreeRTOS/Source/tasks.c.obj	8ca35350191b0150
 5	415	1791851512932925007	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G4xx_HAL_Driver/Src/stm32g4xx_hal_fdcan.c.obj	b254950488c2444d
 5	421	1791851512932190425	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32G4xx_HAL_Driver/Src/stm32g4xx_hal_pwr_ex.c.obj	fc17bff289d41568
+<<<<<<< HEAD
 >>>>>>> eba2008da17b96cd7854994f70be0741cdec1759
+=======
+8	162	1792096214013659182	cmake/stm32cubemx/CMakeFiles/FreeRTOS.dir/__/__/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F/port.c.obj	59e84540b567c535
+8	162	1792096214013515515	cmake/stm32cubemx/CMakeFiles/FreeRTOS.dir/__/__/Middlewares/Third_Party/FreeRTOS/Source/portable/MemMang/heap_4.c.obj	210f8d100f229429
+7	169	1792096214013208141	cmake/stm32cubemx/CMakeFiles/FreeRTOS.dir/__/__/Middlewares/Third_Party/FreeRTOS/Source/timers.c.obj	e17f5f4a7cdf2096
+7	280	1792096214013369432	cmake/stm32cubemx/CMakeFiles/FreeRTOS.dir/__/__/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.c.obj	79e2ef361d49e845
+2	253	1792096824837249642	CMakeFiles/ECU2027.dir/Core/Src/main.c.obj	8846b30940df31ed
+>>>>>>> 01e95a9 (Fixed compilation errors, should be closer to working now.)

@@ -1,4 +1,5 @@
 #include "can_bus.h"
+#include <string.h>
 
 void can_bus_init(CanBus *bus, FDCAN_HandleTypeDef *hfdcan){
     bus->hfdcan = hfdcan;
@@ -8,23 +9,8 @@ void can_bus_init(CanBus *bus, FDCAN_HandleTypeDef *hfdcan){
 }
 
 bool can_bus_start(CanBus *bus){
-
-    // Configures the CAN filter to accept all messages and place them in RX FIFO 0
-    FDCAN_FilterTypeDef filterConfig = {0};
-    filterConfig.IdType = FDCAN_STANDARD_ID;
-    filterConfig.FilterIndex = 0;
-    filterConfig.FilterType = FDCAN_FILTER_MASK;
-    filterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-    filterConfig.FilterID1 = 0x000;
-    filterConfig.FilterID2 = 0x000;
-
-    // Configures the filter
-    if (HAL_FDCAN_ConfigFilter(bus->hfdcan, &filterConfig) != HAL_OK) {
-        return false;
-    }
-
     // Accepts unknown IDs and places them in RX FIFO 0
-    if (HAL_FDCAN_ConfigGlobalFilter(bus->hfdcan, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_FILTER_REMOTE, FDCAN_FILTER_REMOTE) != HAL_OK) {
+    if (HAL_FDCAN_ConfigGlobalFilter(bus->hfdcan, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE) != HAL_OK) {
         return false;
     }
 
@@ -84,7 +70,7 @@ void can_bus_service(CanBus *bus){
         header.Identifier            = message->id;
         header.IdType                = message->flags.extended ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID;
         header.TxFrameType           = message->flags.remote ? FDCAN_REMOTE_FRAME : FDCAN_DATA_FRAME;
-        header.DataLength            = message->len;
+        header.DataLength            = ((uint32_t)message->len) << 16;   /* FDCAN_DLC_BYTES_n */
         header.ErrorStateIndicator   = FDCAN_ESI_ACTIVE;
         header.BitRateSwitch         = FDCAN_BRS_OFF;
         header.FDFormat              = FDCAN_CLASSIC_CAN;
@@ -119,9 +105,11 @@ void can_bus_on_rx_interrupt(CanBus *bus) {
             continue;
         }
 
+        uint32_t dlc = rx_header.DataLength >> 16;
         CAN_message_t *message = &bus->rx_buf[bus->rx_head];
+        memset(message, 0, sizeof(*message));   /* clears buffer */
         message->id  = rx_header.Identifier;
-        message->len = (rx_header.DataLength > 8) ? 8 : (uint8_t)rx_header.DataLength;
+        message->len = (dlc > 8) ? 8 : (uint8_t)dlc;
         message->flags.extended = (rx_header.IdType == FDCAN_EXTENDED_ID);
         message->flags.remote   = (rx_header.RxFrameType == FDCAN_REMOTE_FRAME);
         for (uint8_t i = 0; i < message->len; i++) message->buf[i] = rx_data[i];

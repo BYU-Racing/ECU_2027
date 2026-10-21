@@ -63,7 +63,8 @@ typedef enum {
     ASSERT_CODE_THROTTLE_OUT_OF_RANGE = 21,
     ASSERT_CODE_THROTTLE_SENSORS_DIVERGED = 22,
     /* T.4.2.11(b), 2026 rules. */
-    ASSERT_CODE_PEDAL_TIMEOUT = 23
+    ASSERT_CODE_PEDAL_TIMEOUT = 23,
+    ASSERT_CODE_BRAKE_SENSOR_FAULT = 24
 } AssertCode;
 
 /* Function type for the assertion failure handler. */

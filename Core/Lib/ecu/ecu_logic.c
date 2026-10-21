@@ -53,7 +53,7 @@ static uint8_t smoothed_throttle;
 
 /* PID with the target as the current target torque, and the measurement as the
  * last output. Equivalent to the old Pid(0, 0.0, 7.8, 0.0, 20.0). */
-static Pid    throttle_pid = { .p_term = 0.0, .i_term = 7.8, .d_term = 0.0, .windup_cap = 20.0 };
+static Pid    throttle_pid;
 static Timer  throttle_pid_pacing = { 0, PID_PERIOD_MS };
 static double throttle_last_output;
 static double throttle_pid_output;
@@ -118,20 +118,8 @@ void pedals_poll(uint32_t current_time_ms) {
      * `pedals_implausibility` again, so as written this block never runs.
      * Compare with the original C++ poll(); it probably re-evaluated the
      * sensors (e.g. called pedals_maybe_recompute_mapped_throttle) before this. */
-    if (pedals_implausibility.active) {
-        if (last_implausibility.active) {
-            /* Restore the original details so we keep the time and info of
-             * the first implausibility. */
-            pedals_implausibility = last_implausibility;
-        }
-
-        ImplausibilityDetails details = pedals_implausibility;
-
-        /* Panic if the implausibility has lasted too long, reporting the
-         * original file and line rather than the current one. */
-        if (current_time_ms - details.happened_at_ms > ALLOWED_IMPLAUSILIBTY_LENGTH_MS) {
-            assert_failed(ASSERT_LEVEL_SAFETY, details.line_info, details.code);
-        }
+    if (pedals_implausibility.active && (current_time_ms - pedals_implausibility.happened_at_ms) > ALLOWED_IMPLAUSILIBTY_LENGTH_MS) {
+        ecu_assert_failed(ASSERT_LEVEL_SAFETY, pedals_implausibility.line_info, pedals_implausibility.code);
     }
 
     pedals_smooth_throttle(current_time_ms);
@@ -154,10 +142,20 @@ void pedals_input_throttle_two_position(uint32_t current_time_ms, uint16_t value
 }
 
 void pedals_input_brake_position(uint32_t current_time_ms, uint16_t position) {
-    brake_position = position;
-    trigger_cancel(&pedals_too_long_since_brake);
+    SAFETY_ASSERT(position >= BRAKE_PRESSURE_MIN, ASSERT_CODE_BRAKE_SENSOR_FAULT); 
+    brake_position = position;    trigger_cancel(&pedals_too_long_since_brake);
     pedals_maybe_recompute_mapped_throttle(current_time_ms);
+    brake_light_on = pedals_is_brake_pressed();
 }
+
+void ecu_set_start_switch(void) {
+    start_switch_on = true;
+}
+
+void ecu_reset_start_switch(void) {
+    start_switch_on = false;
+}
+
 
 uint8_t pedals_get_throttle_value(void) {
     return smoothed_throttle;
@@ -171,6 +169,11 @@ int16_t pedals_get_current_torque_amount(void) {
     double cascadia_format = throttle_pid_output * 10.0;
     /* The PID may undershoot, so clamp it if it gets below 0. */
     if (cascadia_format < 0.0) cascadia_format = 0.0;
+    /* unsmoothed, 0.1 Nm */
+    double request = map_throttle_to_torque(mapped_throttle) * 10.0;
+    if (cascadia_format > request){
+        cascadia_format = request;
+    }
     if (cascadia_format > (double)MAX_TORQUE) {
         cascadia_format = (double)MAX_TORQUE;
     }
@@ -211,6 +214,8 @@ static void pedals_maybe_recompute_mapped_throttle(uint32_t current_time_ms) {
         return;
     }
 
+    /* good sample, implausibility over */
+    pedals_implausibility.active = false;
     mapped_throttle = (uint8_t)((throttle_1_percent + throttle_2_percent) / 2);
 }
 
@@ -266,7 +271,7 @@ static void ecu_handle_startup_sequence(uint32_t current_time_ms) {
          *   2. The start switch is on.
          *   3. The inverter has reached Pre-charge Complete.
          * Then we wait two seconds, aborting if a precondition stops holding. */
-        if (pedals_is_brake_pressed() && start_switch_on && precharge_complete) {
+        if (pedals_is_brake_pressed() && mapped_throttle <= 5 && start_switch_on && precharge_complete) {
             if (!trigger_started(&ecu_startup_countdown)) {
                 trigger_start(&ecu_startup_countdown, current_time_ms, STARTUP_DELAY_MS);
             } else if (trigger_reached(&ecu_startup_countdown, current_time_ms)) {
@@ -278,9 +283,14 @@ static void ecu_handle_startup_sequence(uint32_t current_time_ms) {
         }
     }
 
-    if (!start_switch_on) {
-        /* If the start switch turns off, the car turns off. */
-        car_fully_on = false;
+    /* catches precharge not completing */
+    static uint32_t vsm_last_rx_ms; 
+    static bool vsm_seen;     
+    if (!vsm_seen || (current_time_ms - vsm_last_rx_ms) > VSM_TIMEOUT_MS) {
+        precharge_complete = false;
+    }
+    if (!start_switch_on || !precharge_complete) { 
+        car_fully_on = false; 
     }
 
     if (!car_fully_on_before && car_fully_on) {
@@ -293,15 +303,19 @@ static void ecu_handle_startup_sequence(uint32_t current_time_ms) {
     if (trigger_reached(&horn_off_trigger, current_time_ms)) {
         horn_on = false;
     }
+
+    // Starts PID timer
+    pid_init(&throttle_pid, current_time_ms, 0.0, 7.8, 0.0, 20.0);
+}
+
+void ecu_update(uint32_t current_time_ms){ 
+    ecu_handle_startup_sequence(current_time_ms); 
+    pedals_poll(current_time_ms); 
 }
 
 void ecu_process_message(uint32_t current_time_ms, CAN_message_t msg) {
     /* If we received a CAN message, update the corresponding value. */
     switch ((MessageId)msg.id) {
-        case MESSAGE_ID_START_SWITCH:
-            start_switch_on = parse_start_switch(msg);
-            break;
-
         /* To check VSM internal state. */
         case MESSAGE_ID_INTERNAL_STATES: {
             VsmState vsm_state = parse_motor_internal_states(msg).vsm_state;
@@ -312,35 +326,16 @@ void ecu_process_message(uint32_t current_time_ms, CAN_message_t msg) {
                 vsm_state == VSM_STATE_MOTOR_RUNNING;
             break;
         }
-
-        case MESSAGE_ID_THROTTLE_ONE_POSITION:
-            pedals_input_throttle_one_position(current_time_ms, parse_throttle_one_position(msg));
-            break;
-
-        case MESSAGE_ID_THROTTLE_TWO_POSITION:
-            pedals_input_throttle_two_position(current_time_ms, parse_throttle_two_position(msg));
-            break;
-
-        case MESSAGE_ID_BRAKE_PRESSURE:
-            pedals_input_brake_position(current_time_ms, parse_brake_pressure(msg));
-            brake_light_on = pedals_is_brake_pressed();
-            break;
-
-        default:
-            break;
     }
 }
 
 GpioState ecu_poll_gpio_state(uint32_t current_time_ms) {
-    UNUSED(current_time_ms);
+    (void)current_time_ms;
     GpioState result = { .horn_on = horn_on, .brake_light_on = brake_light_on };
     return result;
 }
 
 bool ecu_poll_can(uint32_t current_time_ms, CAN_message_t *out) {
-    ecu_handle_startup_sequence(current_time_ms);
-    pedals_poll(current_time_ms);
-
     /* The engine is enabled if all preconditions of `car_fully_on` passed and
      * the brake is up. We don't enable the inverter until the driver lifts
      * off the brake. */
@@ -352,9 +347,10 @@ bool ecu_poll_can(uint32_t current_time_ms, CAN_message_t *out) {
         }
     }
     /* Brake and throttle cannot be pressed at the same time. 2026 rules, EV.4.7. */
-    if (pedals_get_throttle_value() >= 25 && pedals_is_brake_pressed()) {
-        throttle_and_brake_pressed = true;
+    if (mapped_throttle >= 25 && pedals_is_brake_pressed()) { 
+        throttle_and_brake_pressed = true; 
     }
+
 
     bool inverter_enabled = false;
     int16_t torque_to_use = 0;
@@ -366,7 +362,11 @@ bool ecu_poll_can(uint32_t current_time_ms, CAN_message_t *out) {
 
     /* Pace how often we send a motor command. We still send these when the
      * inverter is off, so the motor gets shutdown messages. */
-    if (timer_should_fire(&ecu_motor_control_pacing, current_time_ms)) {
+    static bool last_inverter_enabled;
+    bool force_send = last_inverter_enabled && !inverter_enabled;
+    if (force_send || timer_should_fire(&ecu_motor_control_pacing, current_time_ms)) {
+        last_inverter_enabled = inverter_enabled;
+
         MotorControlCommand cmd = {0};
         cmd.torque = torque_to_use;
         cmd.speed = 0;

@@ -29,7 +29,7 @@
  * section T.4.2.5 */
 #define ALLOWED_IMPLAUSILIBTY_LENGTH_MS 60
 
-
+// TO DO: map throttle to actual throttle values
 #define THROTTLE1_LOW 660
 #define THROTTLE1_HIGH 950
 /* If the throttle 1 values is lower or higher than this range, we panic.
@@ -74,3 +74,6 @@
  
 /* Drive Modes */
 #define DRIVE_MODE 0
+
+/* If precharge fails, shuts off after 500ms */
+#define VSM_TIMEOUT_MS 500

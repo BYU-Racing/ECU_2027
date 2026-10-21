@@ -21,7 +21,7 @@ void ecu_assert_failed( AssertLevel level, LineInfo line_info, AssertCode error_
 
     if (level == ASSERT_LEVEL_SAFETY) {
         for (;;) {
-            /* wait for watchdog reser / power cycle */
+            // TO DO: currently a latched assert handler, find a better way
         }
     }
 }

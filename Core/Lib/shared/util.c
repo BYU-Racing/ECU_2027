@@ -188,9 +188,8 @@ uint32_t str_hash(const char *str) {
 
 /* Generic function to remap one numerical range to another. */
 int64_t map_range(int32_t input_32, int32_t old_min_32, int32_t old_max_32, int32_t new_min_32, int32_t new_max_32) {
-    if (old_min_32 == old_max_32 || new_min_32 == new_max_32) {
-        /* Avoid division by zero. */
-        return 0;
+    if (old_min_32 == old_max_32) {
+         return new_min_32; 
     }
 
     /* Widen all values to 64-bit ints to avoid any issues with integer overflow. */

@@ -35,6 +35,8 @@ void can_buses_send_shutdown(void) {
     message.id  = MESSAGE_ID_CONTROL_COMMAND;   /* MESSAGE_ID_CONTROL_COMMAND: all zeroes = zero torque, inverter off */
     message.len = control_command_message_length;
 
+    /* drop queued torque commands */
+    MotorCAN.tx_tail = MotorCAN.tx_head;      
     can_bus_write(&MotorCAN, &message);
     can_bus_service(&MotorCAN);
 }
