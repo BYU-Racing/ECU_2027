@@ -78,10 +78,23 @@ static void MX_ADC2_Init(void);
 /* USER CODE BEGIN 0 */
 // Initializes the assert handler to catch errors
 static void ecu_assert_handler(AssertLevel level, LineInfo line_info, AssertCode error_code) {
-        (void)level;
-        (void)line_info;
-        (void)error_code;
-    }
+  if (level == ASSERT_LEVEL_SAFETY) {
+    HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, GPIO_PIN_RESET);
+    /* zero torque, inverter off */
+    can_buses_send_shutdown();                       
+    CriticalFault fault = {
+        .error_code = error_code,
+        .assert_failure_line = (uint16_t)line_info.line_no,
+        .file_name_hash = str_hash(line_info.filename),
+    };
+    CAN_message_t msg = create_critical_fault_command(fault);
+    can_bus_write(&DataCAN, &msg);
+    can_bus_service(&DataCAN);
+  } else {
+    //TO DO: implement this
+    ecu_request_soft_reset(HAL_GetTick());
+  }
+}
 /* USER CODE END 0 */
 
 /**
@@ -92,8 +105,10 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  Timer broadcast_build_info_timer = { .last_fired_at = 0, .duration_ms = BROADCAST_INFO_INTERVAL_MS };
-  Timer debug_pacing = { .last_fired_at = 0, .duration_ms = 500 };
+
+  //TO DO: implement these
+  //Timer broadcast_build_info_timer = { .last_fired_at = 0, .duration_ms = BROADCAST_INFO_INTERVAL_MS };
+  //Timer debug_pacing = { .last_fired_at = 0, .duration_ms = 500 };
 
   /* All these timers control how often messages are emitted for each of these sensors. */
   Timer throttle1_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
@@ -157,42 +172,46 @@ int main(void)
     uint32_t current_time_ms = HAL_GetTick();
     
     CAN_message_t rmsg;
-    if (can_bus_read(&MotorCAN, &rmsg)) {
-        ecu_process_message(current_time_ms, rmsg);
+    while (can_bus_read(&MotorCAN, &rmsg)) { 
+      ecu_process_message(current_time_ms, rmsg); 
     }
 
     /* Check if any sensors need to send values down the CAN bus, and
     * if so, send them. */
     if (timer_should_fire(&throttle1_timer, current_time_ms)) {
-        uint16_t reading = read_throttle_1();
+        pedals_input_throttle_one_position(current_time_ms, read_throttle_1());
     }
 
-    if (timer_should_fire(&throttle1_timer, current_time_ms)) {
-        uint16_t reading = read_throttle_2();
+    if (timer_should_fire(&throttle2_timer, current_time_ms)) {
+        pedals_input_throttle_two_position(current_time_ms, read_throttle_2());
     }
 
-    if (timer_should_fire(&throttle1_timer, current_time_ms)) {
-        uint16_t reading = read_brake();
+    if (timer_should_fire(&brake_timer, current_time_ms)) {
+        pedals_input_brake_position(current_time_ms, read_brake());
     }
 
     if (timer_should_fire(&start_switch_timer, current_time_ms)) {
-        bool reading = HAL_GPIO_ReadPin(SW_1_GPIO_Port, SW_1_Pin);
+        if (HAL_GPIO_ReadPin(SW_1_GPIO_Port, SW_1_Pin) == GPIO_PIN_SET) {
+          ecu_set_start_switch();
+         } else {
+          ecu_reset_start_switch();
+         }
     }
 
     /* Generate all outgoing messages and send each. */
-    while (true) {
-      CAN_message_t *to_send;
-      if (ecu_poll_can(current_time_ms, &to_send)){
-        if (!can_bus_write(&MotorCAN, &to_send)){
-          LineInfo line_info = {__FILE__, __LINE__};
-          ecu_assert_failed(ASSERT_LEVEL_SAFETY, line_info, ASSERT_CODE_BAD_MESSAGE);
-        }
+
+    CAN_message_t to_send;
+    ecu_update(current_time_ms);
+    while (ecu_poll_can(current_time_ms, &to_send)){
+      if (!can_bus_write(&MotorCAN, &to_send)){
+        LineInfo line_info = {__FILE__, __LINE__};
+        ecu_assert_failed(ASSERT_LEVEL_SAFETY, line_info, ASSERT_CODE_BAD_MESSAGE);
       } 
     }
 
-    auto state = ecu_poll_gpio_state(current_time_ms);
+    GpioState state = ecu_poll_gpio_state(current_time_ms);
     HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, state.horn_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(Brake_AN_GPIO_Port, Brake_Light_IO_Pin, state.brake_light_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(Brake_Light_IO_GPIO_Port, Brake_Light_IO_Pin, state.brake_light_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
     // TO DO: Added to broadcast who flashed code to the ECU. Currently doens't work.
     // if (broadcast_build_info_timer.shouldFire(current_time_ms)) {
