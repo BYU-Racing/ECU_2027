@@ -75,6 +75,8 @@ static Trigger ecu_startup_countdown;
 /* Paces how often we send motor control commands. */
 static Timer ecu_motor_control_pacing = { 0, 15 };
 static bool precharge_complete;
+static uint32_t vsm_last_rx_ms;
+static bool     vsm_seen;
 
 /* ====================================================================== */
 /* Pedals                                                                  */
@@ -92,11 +94,6 @@ static double map_throttle_to_torque(uint16_t throttle_percent) {
 }
 
 void pedals_poll(uint32_t current_time_ms) {
-    /* Save the current implausibility before clearing it. If we clear it and
-     * get a new one, the implausibility hasn't stopped. */
-    ImplausibilityDetails pedals_last_implausibility = pedals_implausibility;
-    pedals_implausibility.active = false;
-
     /* 2026 rules, T.4.2.11(b): if no message has arrived for too long, panic.
      * We proactively start these triggers and cancel them whenever a message
      * arrives (see `pedals_input_throttle_one_position`). */
@@ -114,23 +111,8 @@ void pedals_poll(uint32_t current_time_ms) {
         SAFETY_ASSERT(false, ASSERT_CODE_PEDAL_TIMEOUT);
     }
 
-
-    if (pedals_implausibility.active == true) {
-        if (pedals_last_implausibility.active == true) {
-            /* Restore the original implausibility information, so we have
-            * both the time and information that the first implausibility
-            * happened at. */
-           pedals_implausibility = pedals_last_implausibility;
-        }
-
-        ImplausibilityDetails details = pedals_implausibility;
-
-        /* Use this to panic if an implausibility has occured for too long. */
-        if (current_time_ms - details.happened_at_ms > ALLOWED_IMPLAUSILIBTY_LENGTH_MS) {
-            /* Because we tracked the original file and error number, we report
-             * those details, instead of the current line. */
-            ecu_assert_failed(ASSERT_LEVEL_SAFETY, details.line_info, details.code);
-        }
+    if (pedals_implausibility.active && (current_time_ms - pedals_implausibility.happened_at_ms > ALLOWED_IMPLAUSILIBTY_LENGTH_MS)) {
+        ecu_assert_failed(ASSERT_LEVEL_SAFETY, pedals_implausibility.line_info, pedals_implausibility.code);
     }
 
     pedals_smooth_throttle(current_time_ms);
@@ -263,6 +245,10 @@ static void pedals_throttle_post_processing(uint32_t current_time_ms) {
 /* Records that an implausibility happened. We don't panic immediately, as the
  * rules allow tolerating one for up to 100 ms (2026 rules, T.4.2.5). */
 static void pedals_note_implausibility(uint32_t current_time_ms, LineInfo line_info, AssertCode code) {
+    if (pedals_implausibility.active) {
+        return;
+    }
+
     pedals_implausibility.active = true;
     pedals_implausibility.happened_at_ms = current_time_ms;
     pedals_implausibility.line_info = line_info;
@@ -274,6 +260,10 @@ static void pedals_note_implausibility(uint32_t current_time_ms, LineInfo line_i
 /* ====================================================================== */
 
 static void ecu_handle_startup_sequence(uint32_t current_time_ms) {
+    if (!vsm_seen || (current_time_ms - vsm_last_rx_ms) > VSM_TIMEOUT_MS) {
+        precharge_complete = false;
+    }
+
     bool car_fully_on_before = car_fully_on;
 
     if (!car_fully_on) {
@@ -305,6 +295,9 @@ static void ecu_handle_startup_sequence(uint32_t current_time_ms) {
     }
 
     if (!car_fully_on_before && car_fully_on) {
+        // Starts PID timer
+        pid_init(&throttle_pid, current_time_ms, 0.0, 7.8, 0.0, 20.0);
+
         /* The car just turned on, so sound the horn for 2 seconds. */
         horn_on = true;
         trigger_start(&horn_off_trigger, current_time_ms, HORN_TIME_MS);
@@ -314,9 +307,6 @@ static void ecu_handle_startup_sequence(uint32_t current_time_ms) {
     if (trigger_reached(&horn_off_trigger, current_time_ms)) {
         horn_on = false;
     }
-
-    // Starts PID timer
-    pid_init(&throttle_pid, current_time_ms, 0.0, 7.8, 0.0, 20.0);
 }
 
 void ecu_update(uint32_t current_time_ms){ 
@@ -334,6 +324,9 @@ void ecu_process_message(uint32_t current_time_ms, CAN_message_t msg) {
             vsm_state == VSM_STATE_VSM_WAIT ||
             vsm_state == VSM_STATE_VSM_READY ||
             vsm_state == VSM_STATE_MOTOR_RUNNING;
+
+            vsm_seen = true;
+            vsm_last_rx_ms = current_time_ms;
     }
 }
 

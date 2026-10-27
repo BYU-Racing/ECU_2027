@@ -7,9 +7,7 @@
 #define SOFT_RESET_LENGTH_MS 2000
 
 /* COMMUNICATIONS */
-// TO DO: Not sure about how to implement serial stuff yet
-//#define SERIAL_BAUD_RATE 115200
-#define CAN_BAUD_RATE 250000
+/* The can baud rate should be 250000, this is defined in cubemx but a not is made here */
 
 /* Interval between broadcasting the system build info. */
 #define BROADCAST_INFO_INTERVAL_MS 1000
