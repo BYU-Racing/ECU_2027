@@ -396,7 +396,7 @@ void pedals_print_state(void) {
 }
 
 // Prints ecu state and variables
-void ecu_print_state() {
+void ecu_print_state(void) {
     PRINTF("Ecu:\n");
     PRINTF("  car_fully_on: %s\n", car_fully_on ? "yes" : "no");
     PRINTF("  start_switch_on: %s\n", start_switch_on ? "yes" : "no");

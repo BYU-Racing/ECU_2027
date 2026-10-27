@@ -95,8 +95,9 @@ static void ecu_assert_handler(AssertLevel level, LineInfo line_info, AssertCode
     can_bus_write(&DataCAN, &msg);
     can_bus_service(&DataCAN);
   } else {
-    //TO DO: implement this
-    ecu_request_soft_reset(HAL_GetTick());
+    //TO DO: implement this, right now nothing calls soft assert
+    //ecu_request_soft_reset(HAL_GetTick());
+    return;
   }
 }
 

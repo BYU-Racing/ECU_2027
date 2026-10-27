@@ -227,13 +227,10 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 
     break;
 
-    case CDC_SET_CONTROL_LINE_STATE:
-
-    break;
-
     case CDC_SEND_BREAK:
 
     break;
+    
     case CDC_SET_CONTROL_LINE_STATE:
     {
         USBD_SetupReqTypedef *req = (USBD_SetupReqTypedef *)pbuf;
