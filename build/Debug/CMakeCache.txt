@@ -114,6 +114,11 @@ CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO:STRING=
 //Enable/Disable output of build database during the build.
 CMAKE_EXPORT_BUILD_DATABASE:BOOL=
 
+//Enable output of a compile_commands.json file listing the exact
+// compiler invocation for each translation unit. Implemented by
+// the Makefile and Ninja generators; ignored elsewhere.
+CMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE
+
 //Value Computed by CMake.
 CMAKE_FIND_PACKAGE_REDIRECTS_DIR:STATIC=/Users/gavinturley/ECU_2027/build/Debug/CMakeFiles/pkgRedirects
 
@@ -223,15 +228,10 @@ CMAKE_STRIP:FILEPATH=/opt/homebrew/bin/arm-none-eabi-strip
 //Path to a program.
 CMAKE_TAPI:FILEPATH=CMAKE_TAPI-NOTFOUND
 
-<<<<<<< HEAD
-//No help, variable specified on the command line.
-CMAKE_TOOLCHAIN_FILE:UNINITIALIZED=C:/Users/77tur/source/repos/ECU_2027-1/cmake/gcc-arm-none-eabi.cmake
-=======
 //Path to a CMake toolchain file, read early in the CMake run,
 // that specifies the compilers, toolchain utilities, and target-platform
 // information used when cross-compiling.
-CMAKE_TOOLCHAIN_FILE:FILEPATH=/Users/gavinturley/ECU_2027/cmake/gcc-arm-none-eabi.cmake
->>>>>>> eba2008da17b96cd7854994f70be0741cdec1759
+CMAKE_TOOLCHAIN_FILE:UNINITIALIZED=/Users/gavinturley/ECU_2027/cmake/gcc-arm-none-eabi.cmake
 
 //If this value is on, makefiles will be generated without the
 // .SILENT directive, and all commands will be echoed to the console
@@ -320,11 +320,7 @@ CMAKE_DIAGNOSTIC_INIT:INTERNAL=CMD_AUTHOR=WARN;CMD_DEPRECATED=WARN;CMD_EXPERIMEN
 //ADVANCED property for variable: CMAKE_DLLTOOL
 CMAKE_DLLTOOL-ADVANCED:INTERNAL=1
 //Path to cache edit program executable.
-<<<<<<< HEAD
-CMAKE_EDIT_COMMAND:INTERNAL=C:/Users/77tur/AppData/Local/stm32cube/bundles/cmake/4.3.1+st.1/bin/cmake-gui.exe
-=======
 CMAKE_EDIT_COMMAND:INTERNAL=/opt/homebrew/bin/ccmake
->>>>>>> eba2008da17b96cd7854994f70be0741cdec1759
 //Deprecated.  Use -W[no-]error=deprecated instead.
 CMAKE_ERROR_DEPRECATED:INTERNAL=OFF
 //Executable file format

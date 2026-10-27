@@ -1,2 +1,2 @@
-C:/Users/77tur/source/repos/ECU_2027-1/Core/Src/system_stm32g4xx.c:181:6:SystemInit	4	static
-C:/Users/77tur/source/repos/ECU_2027-1/Core/Src/system_stm32g4xx.c:230:6:SystemCoreClockUpdate	32	static
+/Users/gavinturley/ECU_2027/Core/Src/system_stm32g4xx.c:181:6:SystemInit	4	static
+/Users/gavinturley/ECU_2027/Core/Src/system_stm32g4xx.c:230:6:SystemCoreClockUpdate	32	static

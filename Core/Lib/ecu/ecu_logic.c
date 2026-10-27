@@ -383,3 +383,23 @@ bool ecu_poll_can(uint32_t current_time_ms, CAN_message_t *out) {
     /* No message generated; tell the caller to stop polling. */
     return false;
 }
+
+// Prints pedal state and values
+void pedals_print_state(void) {
+    PRINTF("Pedals:\n");
+    PRINTF("  throttle_1_position: %u\n", throttle_1_position);
+    PRINTF("  throttle_2_position: %u\n", throttle_2_position);
+    PRINTF("  mapped_throttle: %u\n", mapped_throttle);
+    PRINTF("  smoothed_throttle: %u\n", smoothed_throttle);
+    PRINTF("  brake_position: %u\n", brake_position);
+    PRINTF("  pedals_implausibility: %s\n", pedals_implausibility.active ? "yes" : "no");
+}
+
+// Prints ecu state and variables
+void ecu_print_state() {
+    PRINTF("Ecu:\n");
+    PRINTF("  car_fully_on: %s\n", car_fully_on ? "yes" : "no");
+    PRINTF("  start_switch_on: %s\n", start_switch_on ? "yes" : "no");
+    PRINTF("  precharge_complete: %s\n", precharge_complete ? "yes" : "no");
+    pedals_print_state();
+}
