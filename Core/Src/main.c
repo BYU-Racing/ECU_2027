@@ -22,6 +22,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "usbd_cdc_if.h"
+#include <stdio.h>
+
 #include "../Lib/shared/ecu_assert.h"
 #include "../Lib/shared/util.h"
 
@@ -92,10 +95,31 @@ static void ecu_assert_handler(AssertLevel level, LineInfo line_info, AssertCode
     can_bus_write(&DataCAN, &msg);
     can_bus_service(&DataCAN);
   } else {
-    //TO DO: implement this
-    ecu_request_soft_reset(HAL_GetTick());
+    //TO DO: implement this, right now nothing calls soft assert
+    //ecu_request_soft_reset(HAL_GetTick());
+    return;
   }
 }
+
+// Terminal printing
+extern USBD_HandleTypeDef hUsbDeviceFS;
+extern volatile uint8_t usb_dtr;
+// Low level print function called after PRINTF()
+int _write(int file, char *ptr, int len)
+{
+    // Only prints if terminal is open
+    if (hUsbDeviceFS.dev_state != USBD_STATE_CONFIGURED || !usb_dtr) {
+        return len;
+    }
+
+    // Breaks if waiting too long to send
+    uint32_t start = HAL_GetTick();
+    while (CDC_Transmit_FS((uint8_t*)ptr, len) == USBD_BUSY) {
+        if (HAL_GetTick() - start > 10) break;
+    }
+    return len;
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -109,7 +133,7 @@ int main(void)
 
   //TO DO: implement these
   //Timer broadcast_build_info_timer = { .last_fired_at = 0, .duration_ms = BROADCAST_INFO_INTERVAL_MS };
-  //Timer debug_pacing = { .last_fired_at = 0, .duration_ms = 500 };
+  Timer debug_pacing = { .last_fired_at = 0, .duration_ms = 500 };
 
   /* All these timers control how often messages are emitted for each of these sensors. */
   Timer throttle1_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
@@ -128,13 +152,14 @@ int main(void)
   // wrong during setup, we'll wind everything down.
   ecu_register_assert_failed_handler(ecu_assert_handler);
 
+  // Terminal printing init
+  HAL_Delay(1500);
+  setvbuf(stdout, NULL, _IONBF, 0);
+  PRINTF("Terminal printing initialized.\r\n");
 
-  // TO DO: Get serial connection working for debugging.
-  // Serial.begin(SERIAL_BAUD_RATE);
-
-  // Serial.println("============================================");
-  // Serial.println("==========Motor CAN initialized=============");
-  // Serial.println("============================================");
+  PRINTF("============================================");
+  PRINTF("==========Motor CAN initialized=============");
+  PRINTF("============================================\n");
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -160,6 +185,8 @@ int main(void)
   if (!adc_inputs_start()) { 
     Error_Handler(); 
   }
+
+  
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -201,7 +228,6 @@ int main(void)
     }
 
     /* Generate all outgoing messages and send each. */
-
     CAN_message_t to_send;
     ecu_update(current_time_ms);
     while (ecu_poll_can(current_time_ms, &to_send)){
@@ -222,10 +248,9 @@ int main(void)
     //     can_bus_write(&MotorCAN, &create_uploader_message(GIT_UPLOADER));
     // }
 
-    // TO DO: figure out printing for print states
-    // if (timer_should_fire(&debug_pacing, current_time_ms)) {
-    //     ecu_print_state();
-    // }
+    if (timer_should_fire(&debug_pacing, current_time_ms)) {
+        ecu_print_state();
+    }
   }
   /* USER CODE END 3 */
 }

@@ -10,7 +10,7 @@
 #include <stdbool.h>
 
 /* All the CAN messages with their associated IDs. */
-typedef enum {
+typedef enum MessageId {
     /* Sensor messages. */
     MESSAGE_ID_START_SWITCH = 0,
     MESSAGE_ID_THROTTLE_ONE_POSITION = 1,
@@ -97,7 +97,7 @@ typedef enum {
     MESSAGE_ID_UPLOADER = 1026,
 } MessageId;
 
-typedef enum {
+typedef enum RvcType {
     RVC_TYPE_X_ACCEL = 0,
     RVC_TYPE_Y_ACCEL = 1,
     RVC_TYPE_Z_ACCEL = 2,
@@ -106,37 +106,37 @@ typedef enum {
     RVC_TYPE_Z_ROT   = 5,
 } RvcType;
 
-typedef struct {
+typedef struct RvcMessage {
     RvcType type;
     float value;
 } RvcMessage;
 
-typedef struct {
+typedef struct CriticalFault {
     AssertCode error_code;
     uint16_t assert_failure_line;
     uint32_t file_name_hash;
 } CriticalFault;
 
-typedef enum {
+typedef enum TirePosition {
     TIRE_POSITION_FRONT_LEFT  = 0,
     TIRE_POSITION_FRONT_RIGHT = 1,
     TIRE_POSITION_REAR_LEFT   = 2,
     TIRE_POSITION_REAR_RIGHT  = 3,
 } TirePosition;
 
-typedef struct {
+typedef struct TireRpmMessage {
     TirePosition position;
     float value;
 } TireRpmMessage;
 
-typedef struct {
+typedef struct TireTemperatureMessage {
     TirePosition position;
     int16_t inner;  /* 1 = 0.1C */
     int16_t outer;  /* 1 = 0.1C */
     int16_t core;   /* 1 = 0.1C */
 } TireTemperatureMessage;
 
-typedef enum {
+typedef enum LapMessageType {
     LAP_MESSAGE_TYPE_TRACK_FORMED = 0,
     LAP_MESSAGE_TYPE_SECTOR_ONE_TIME = 1,
     LAP_MESSAGE_TYPE_SECTOR_TWO_TIME = 2,
@@ -146,35 +146,35 @@ typedef enum {
 
 typedef LapMessageType LapMessage;
 
-typedef struct {
+typedef struct MotorTemperaturesOne {
     int16_t phase_a_temp;      /* 1 = 0.1C */
     int16_t phase_b_temp;      /* 1 = 0.1C */
     int16_t phase_c_temp;      /* 1 = 0.1C */
     int16_t gate_driver_temp;  /* 1 = 0.1C */
 } MotorTemperaturesOne;
 
-typedef struct {
+typedef struct MotorTemperaturesTwo {
     int16_t control_board_temp;    /* 1 = 0.1C */
     int16_t rtd1;                  /* 1 = 0.1C */
     int16_t rtd2;                  /* 1 = 0.1C */
     int16_t rtd3;                  /* 1 = 0.1C */
 } MotorTemperaturesTwo;
 
-typedef struct {
+typedef struct MotorTemperaturesThree {
     int16_t coolant_temp;      /* 1 = 0.1C */
     int16_t hot_spot_temp;     /* 1 = 0.1C */
     int16_t motor_temp;        /* 1 = 0.1C */
     int16_t torque_shudder;    /* 1 = 0.1Nm */
 } MotorTemperaturesThree;
 
-typedef struct {
+typedef struct MotorAnalogInputVoltages {
     int16_t analog_input_one;      /* 1 = 0.01V */
     int16_t analog_input_two;      /* 1 = 0.01V */
     int16_t analog_input_three;    /* 1 = 0.01V */
     int16_t analog_input_four;     /* 1 = 0.01V */
 } MotorAnalogInputVoltages;
 
-typedef struct {
+typedef struct MotorDigitalInputStatus {
     bool forward_switch;
     bool reverse_switch;
     bool brake_switch;
@@ -185,42 +185,42 @@ typedef struct {
     bool digital_input_eight;
 } MotorDigitalInputStatus;
 
-typedef struct {
+typedef struct MotorPositionInfo {
     int16_t motor_angle;            /* 1 = 0.1° */
     int16_t motor_speed;            /* RPM */
     int16_t electrical_frequency;   /* 1 = 0.1Hz */
     int16_t delta_resolver_angle;   /* 1 = 0.1Hz */
 } MotorPositionInfo;
 
-typedef struct {
+typedef struct MotorCurrentInfo {
     int16_t phase_a_current;    /* 1 = 0.1A */
     int16_t phase_b_current;    /* 1 = 0.1A */
     int16_t phase_c_current;    /* 1 = 0.1A */
     int16_t dc_bus_current;     /* 1 = 0.1A */
 } MotorCurrentInfo;
 
-typedef struct {
+typedef struct MotorVoltageInfo {
     int16_t dc_bus_voltage; /* 1 = 0.1V */
     int16_t output_voltage; /* 1 = 0.1V */
     int16_t vab_voltage;    /* 1 = 0.1V */
     int16_t vbc_voltage;    /* 1 = 0.1V */
 } MotorVoltageInfo;
 
-typedef struct {
+typedef struct MotorFluxInfo {
     int16_t flux_command;   /* mWb */
     int16_t flux_feedback;  /* mWb */
     int16_t id_feedback;    /* 1 = 0.1A */
     int16_t iq_feedback;    /* 1 = 0.1A */
 } MotorFluxInfo;
 
-typedef struct {
+typedef struct MotorInternalVoltages {
     int16_t reference_1_5_v;    /* Reference 1.5V. 1 = 0.01V */
     int16_t reference_2_5_v;    /* Reference 2.5V. 1 = 0.01V */
     int16_t reference_5_0_v;    /* Reference 5.0V. 1 = 0.01V */
     int16_t reference_12_v;     /* Reference 12V. 1 = 0.01V */
 } MotorInternalVoltages;
 
-typedef enum {
+typedef enum VsmState {
     VSM_STATE_VSM_START = 0,
     VSM_STATE_PRE_CHARGE_INIT = 1,
     VSM_STATE_PRE_CHARGE_ACTIVE = 2,
@@ -233,7 +233,7 @@ typedef enum {
     VSM_STATE_RECYCLE_POWER = 15,
 } VsmState;
 
-typedef enum {
+typedef enum InverterState {
     INVERTER_STATE_POWER_ON = 0,
     INVERTER_STATE_STOP = 1,
     INVERTER_STATE_OPEN_LOOP = 2,
@@ -249,7 +249,7 @@ typedef enum {
     INVERTER_STATE___INTERNAL6 = 12,
 } InverterState;
 
-typedef struct {
+typedef struct RelayState {
     bool relay_one;
     bool relay_two;
     bool relay_three;
@@ -258,12 +258,12 @@ typedef struct {
     bool relay_six;
 } RelayState;
 
-typedef enum {
+typedef enum InverterRunMode {
     INVERTER_RUN_MODE_TORQUE_MODE = 0,
     INVERTER_RUN_MODE_SPEED_MODE = 1,
 } InverterRunMode;
 
-typedef enum {
+typedef enum InverterActiveDischargeState {
     INVERTER_ACTIVE_DISCHARGE_STATE_DISCHARGE_DISABLED = 0,
     INVERTER_ACTIVE_DISCHARGE_STATE_DISCHARGED_ENABLED_AND_WAITING = 1,
     INVERTER_ACTIVE_DISCHARGE_STATE_PERFORMING_SPEED_CHECK = 2,
@@ -271,22 +271,22 @@ typedef enum {
     INVERTER_ACTIVE_DISCHARGE_STATE_DISCHARGE_COMPLETED = 4,
 } InverterActiveDischargeState;
 
-typedef enum {
+typedef enum InverterCommandMode {
     INVERTER_COMMAND_MODE_CAN_MODE = 0,
     INVERTER_COMMAND_MODE_VSM_MODE = 1,
 } InverterCommandMode;
 
-typedef enum {
+typedef enum BurstModelMode {
     BURST_MODEL_MODE_STALL = 0,
     BURST_MODEL_MODE_HIGH_SPEED = 1,
 } BurstModelMode;
 
-typedef enum {
+typedef enum MotorDirection {
     MOTOR_DIRECTION_REVERSE = 0,
     MOTOR_DIRECTION_FORWARD = 1,
 } MotorDirection;
 
-typedef struct {
+typedef struct MotorInternalStates {
     VsmState vsm_state;
     uint8_t pwm_frequency; /* kHz */
     InverterState inverter_state;
@@ -328,7 +328,7 @@ typedef struct {
     bool limit_stall_burst_model;
 } MotorInternalStates;
 
-typedef struct {
+typedef struct MotorFaultCodes {
     bool hardware_gate_or_desaturation_fault_first; /* For whatever reason the docs have two versions of this. */
     bool hardware_overcurrent_fault;
     bool accelerator_shorted;
@@ -417,14 +417,14 @@ typedef struct MotorTorqueAndTimerInfo {
 } MotorTorqueAndTimerInfo;
 
 /* Full title is Modulation Index & Flux Weakening Output Information */
-typedef struct {
+typedef struct MotorModIndexAndFlux {
     int16_t modulation_index; /* Assumed to be signed. */
     int16_t flux_weakening_output; /* This is the current output of the flux regulator. 1 = 0.1A */
     int16_t id_command; /* The commanded D-axis current. 1 = 0.1A */
     int16_t iq_command; /* The commanded Q-axis current. 1 = 0.1A */
 } MotorModIndexAndFlux;
 
-typedef struct {
+typedef struct MotorControlCommand {
     int16_t torque; /* 1 = 0.1Nm. */
     int16_t speed;  /* RPM */
     MotorDirection direction;

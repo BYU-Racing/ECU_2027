@@ -18,7 +18,7 @@
 /* If an implausibility occurs (2026 rules, T.4.2.4), we save its details so
  * that if it lasts too long we can report what it was and where it came from.
  * `active` replaces the old std::optional. */
-typedef struct  {
+typedef struct ImplausibilityDetails {
     bool active;
     LineInfo line_info;
     uint32_t happened_at_ms;
@@ -75,6 +75,8 @@ static Trigger ecu_startup_countdown;
 /* Paces how often we send motor control commands. */
 static Timer ecu_motor_control_pacing = { 0, 15 };
 static bool precharge_complete;
+static uint32_t vsm_last_rx_ms;
+static bool     vsm_seen;
 
 /* ====================================================================== */
 /* Pedals                                                                  */
@@ -92,11 +94,6 @@ static double map_throttle_to_torque(uint16_t throttle_percent) {
 }
 
 void pedals_poll(uint32_t current_time_ms) {
-    /* Save the current implausibility before clearing it. If we clear it and
-     * get a new one, the implausibility hasn't stopped. */
-    ImplausibilityDetails last_implausibility = pedals_implausibility;
-    pedals_implausibility.active = false;
-
     /* 2026 rules, T.4.2.11(b): if no message has arrived for too long, panic.
      * We proactively start these triggers and cancel them whenever a message
      * arrives (see `pedals_input_throttle_one_position`). */
@@ -114,11 +111,7 @@ void pedals_poll(uint32_t current_time_ms) {
         SAFETY_ASSERT(false, ASSERT_CODE_PEDAL_TIMEOUT);
     }
 
-    /* REVIEW: nothing between the clear above and this check can set
-     * `pedals_implausibility` again, so as written this block never runs.
-     * Compare with the original C++ poll(); it probably re-evaluated the
-     * sensors (e.g. called pedals_maybe_recompute_mapped_throttle) before this. */
-    if (pedals_implausibility.active && (current_time_ms - pedals_implausibility.happened_at_ms) > ALLOWED_IMPLAUSILIBTY_LENGTH_MS) {
+    if (pedals_implausibility.active && (current_time_ms - pedals_implausibility.happened_at_ms > ALLOWED_IMPLAUSILIBTY_LENGTH_MS)) {
         ecu_assert_failed(ASSERT_LEVEL_SAFETY, pedals_implausibility.line_info, pedals_implausibility.code);
     }
 
@@ -252,6 +245,10 @@ static void pedals_throttle_post_processing(uint32_t current_time_ms) {
 /* Records that an implausibility happened. We don't panic immediately, as the
  * rules allow tolerating one for up to 100 ms (2026 rules, T.4.2.5). */
 static void pedals_note_implausibility(uint32_t current_time_ms, LineInfo line_info, AssertCode code) {
+    if (pedals_implausibility.active) {
+        return;
+    }
+
     pedals_implausibility.active = true;
     pedals_implausibility.happened_at_ms = current_time_ms;
     pedals_implausibility.line_info = line_info;
@@ -263,6 +260,10 @@ static void pedals_note_implausibility(uint32_t current_time_ms, LineInfo line_i
 /* ====================================================================== */
 
 static void ecu_handle_startup_sequence(uint32_t current_time_ms) {
+    if (!vsm_seen || (current_time_ms - vsm_last_rx_ms) > VSM_TIMEOUT_MS) {
+        precharge_complete = false;
+    }
+
     bool car_fully_on_before = car_fully_on;
 
     if (!car_fully_on) {
@@ -294,6 +295,9 @@ static void ecu_handle_startup_sequence(uint32_t current_time_ms) {
     }
 
     if (!car_fully_on_before && car_fully_on) {
+        // Starts PID timer
+        pid_init(&throttle_pid, current_time_ms, 0.0, 7.8, 0.0, 20.0);
+
         /* The car just turned on, so sound the horn for 2 seconds. */
         horn_on = true;
         trigger_start(&horn_off_trigger, current_time_ms, HORN_TIME_MS);
@@ -303,9 +307,6 @@ static void ecu_handle_startup_sequence(uint32_t current_time_ms) {
     if (trigger_reached(&horn_off_trigger, current_time_ms)) {
         horn_on = false;
     }
-
-    // Starts PID timer
-    pid_init(&throttle_pid, current_time_ms, 0.0, 7.8, 0.0, 20.0);
 }
 
 void ecu_update(uint32_t current_time_ms){ 
@@ -315,17 +316,17 @@ void ecu_update(uint32_t current_time_ms){
 
 void ecu_process_message(uint32_t current_time_ms, CAN_message_t msg) {
     /* If we received a CAN message, update the corresponding value. */
-    switch ((MessageId)msg.id) {
+    if ((MessageId)msg.id == MESSAGE_ID_INTERNAL_STATES) {
         /* To check VSM internal state. */
-        case MESSAGE_ID_INTERNAL_STATES: {
-            VsmState vsm_state = parse_motor_internal_states(msg).vsm_state;
-            precharge_complete =
-                vsm_state == VSM_STATE_PRE_CHARGE_COMPLETE ||
-                vsm_state == VSM_STATE_VSM_WAIT ||
-                vsm_state == VSM_STATE_VSM_READY ||
-                vsm_state == VSM_STATE_MOTOR_RUNNING;
-            break;
-        }
+        VsmState vsm_state = parse_motor_internal_states(msg).vsm_state;
+        precharge_complete =
+            vsm_state == VSM_STATE_PRE_CHARGE_COMPLETE ||
+            vsm_state == VSM_STATE_VSM_WAIT ||
+            vsm_state == VSM_STATE_VSM_READY ||
+            vsm_state == VSM_STATE_MOTOR_RUNNING;
+
+            vsm_seen = true;
+            vsm_last_rx_ms = current_time_ms;
     }
 }
 
@@ -382,4 +383,24 @@ bool ecu_poll_can(uint32_t current_time_ms, CAN_message_t *out) {
 
     /* No message generated; tell the caller to stop polling. */
     return false;
+}
+
+// Prints pedal state and values
+void pedals_print_state(void) {
+    PRINTF("Pedals:\n");
+    PRINTF("  throttle_1_position: %u\n", throttle_1_position);
+    PRINTF("  throttle_2_position: %u\n", throttle_2_position);
+    PRINTF("  mapped_throttle: %u\n", mapped_throttle);
+    PRINTF("  smoothed_throttle: %u\n", smoothed_throttle);
+    PRINTF("  brake_position: %u\n", brake_position);
+    PRINTF("  pedals_implausibility: %s\n", pedals_implausibility.active ? "yes" : "no");
+}
+
+// Prints ecu state and variables
+void ecu_print_state(void) {
+    PRINTF("Ecu:\n");
+    PRINTF("  car_fully_on: %s\n", car_fully_on ? "yes" : "no");
+    PRINTF("  start_switch_on: %s\n", start_switch_on ? "yes" : "no");
+    PRINTF("  precharge_complete: %s\n", precharge_complete ? "yes" : "no");
+    pedals_print_state();
 }

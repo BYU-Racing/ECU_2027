@@ -31,7 +31,7 @@
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-
+volatile uint8_t usb_dtr = 0;
 /* USER CODE END PV */
 
 /** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
@@ -227,12 +227,15 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 
     break;
 
-    case CDC_SET_CONTROL_LINE_STATE:
-
-    break;
-
     case CDC_SEND_BREAK:
 
+    break;
+    
+    case CDC_SET_CONTROL_LINE_STATE:
+    {
+        USBD_SetupReqTypedef *req = (USBD_SetupReqTypedef *)pbuf;
+        usb_dtr = (req->wValue & 0x0001) ? 1 : 0;
+    }
     break;
 
   default:

@@ -35,7 +35,7 @@
  *  */
 
 /* Captures the filename and line number of the assertion call. */
-typedef struct {
+typedef struct LineInfo {
     const char *filename;
     int line_no;
 } LineInfo;
@@ -45,7 +45,7 @@ typedef struct {
 /* Soft assertions are for minor state checks.
  * Production builds may elevate these to safety assertions.
  */
-typedef enum {
+typedef enum AssertLevel {
     ASSERT_LEVEL_SOFT = 0,
     ASSERT_LEVEL_SAFETY = 1
 } AssertLevel;
@@ -53,7 +53,7 @@ typedef enum {
 /* Error codes for safety assertions.
  * Zero is intentionally unused because it represents "no error" on the screen.
  */
-typedef enum {
+typedef enum AssertCode {
     ASSERT_CODE_UNKNOWN = 1,
     ASSERT_CODE_BAD_MESSAGE = 2,
     ASSERT_CODE_INTEGER_OVERFLOW = 3,

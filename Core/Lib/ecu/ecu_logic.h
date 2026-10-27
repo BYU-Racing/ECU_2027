@@ -45,6 +45,12 @@ bool ecu_poll_can(uint32_t current_time_ms, CAN_message_t *out);
 
 GpioState ecu_poll_gpio_state(uint32_t current_time_ms);
 
+/* Prints the current state and variables of ECU */
+void ecu_print_state(void);
+
+/* Prints the current state and variables of Pedals */
+void pedals_print_state(void);
+
 #ifdef __cplusplus
 }
 #endif
