@@ -18,7 +18,7 @@
 /* If an implausibility occurs (2026 rules, T.4.2.4), we save its details so
  * that if it lasts too long we can report what it was and where it came from.
  * `active` replaces the old std::optional. */
-typedef struct  {
+typedef struct ImplausibilityDetails {
     bool active;
     LineInfo line_info;
     uint32_t happened_at_ms;
@@ -94,7 +94,7 @@ static double map_throttle_to_torque(uint16_t throttle_percent) {
 void pedals_poll(uint32_t current_time_ms) {
     /* Save the current implausibility before clearing it. If we clear it and
      * get a new one, the implausibility hasn't stopped. */
-    ImplausibilityDetails last_implausibility = pedals_implausibility;
+    ImplausibilityDetails pedals_last_implausibility = pedals_implausibility;
     pedals_implausibility.active = false;
 
     /* 2026 rules, T.4.2.11(b): if no message has arrived for too long, panic.
@@ -114,12 +114,23 @@ void pedals_poll(uint32_t current_time_ms) {
         SAFETY_ASSERT(false, ASSERT_CODE_PEDAL_TIMEOUT);
     }
 
-    /* REVIEW: nothing between the clear above and this check can set
-     * `pedals_implausibility` again, so as written this block never runs.
-     * Compare with the original C++ poll(); it probably re-evaluated the
-     * sensors (e.g. called pedals_maybe_recompute_mapped_throttle) before this. */
-    if (pedals_implausibility.active && (current_time_ms - pedals_implausibility.happened_at_ms) > ALLOWED_IMPLAUSILIBTY_LENGTH_MS) {
-        ecu_assert_failed(ASSERT_LEVEL_SAFETY, pedals_implausibility.line_info, pedals_implausibility.code);
+
+    if (pedals_implausibility.active == true) {
+        if (pedals_last_implausibility.active == true) {
+            /* Restore the original implausibility information, so we have
+            * both the time and information that the first implausibility
+            * happened at. */
+           pedals_implausibility = pedals_last_implausibility;
+        }
+
+        ImplausibilityDetails details = pedals_implausibility;
+
+        /* Use this to panic if an implausibility has occured for too long. */
+        if (current_time_ms - details.happened_at_ms > ALLOWED_IMPLAUSILIBTY_LENGTH_MS) {
+            /* Because we tracked the original file and error number, we report
+             * those details, instead of the current line. */
+            ecu_assert_failed(ASSERT_LEVEL_SAFETY, details.line_info, details.code);
+        }
     }
 
     pedals_smooth_throttle(current_time_ms);
@@ -315,17 +326,14 @@ void ecu_update(uint32_t current_time_ms){
 
 void ecu_process_message(uint32_t current_time_ms, CAN_message_t msg) {
     /* If we received a CAN message, update the corresponding value. */
-    switch ((MessageId)msg.id) {
+    if ((MessageId)msg.id == MESSAGE_ID_INTERNAL_STATES) {
         /* To check VSM internal state. */
-        case MESSAGE_ID_INTERNAL_STATES: {
-            VsmState vsm_state = parse_motor_internal_states(msg).vsm_state;
-            precharge_complete =
-                vsm_state == VSM_STATE_PRE_CHARGE_COMPLETE ||
-                vsm_state == VSM_STATE_VSM_WAIT ||
-                vsm_state == VSM_STATE_VSM_READY ||
-                vsm_state == VSM_STATE_MOTOR_RUNNING;
-            break;
-        }
+        VsmState vsm_state = parse_motor_internal_states(msg).vsm_state;
+        precharge_complete =
+            vsm_state == VSM_STATE_PRE_CHARGE_COMPLETE ||
+            vsm_state == VSM_STATE_VSM_WAIT ||
+            vsm_state == VSM_STATE_VSM_READY ||
+            vsm_state == VSM_STATE_MOTOR_RUNNING;
     }
 }
 

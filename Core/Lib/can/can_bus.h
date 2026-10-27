@@ -8,7 +8,7 @@
 #define CAN_RX_SIZE 256
 #define CAN_TX_SIZE 16
 
-typedef struct {
+typedef struct CanBus {
     FDCAN_HandleTypeDef *hfdcan;
 
     CAN_message_t rx_buf[CAN_RX_SIZE];
