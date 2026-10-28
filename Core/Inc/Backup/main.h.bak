@@ -63,6 +63,8 @@ void Error_Handler(void);
 #define APPS_AN_1_GPIO_Port GPIOC
 #define APPS_AN_2_Pin GPIO_PIN_2
 #define APPS_AN_2_GPIO_Port GPIOC
+#define example_Pin GPIO_PIN_0
+#define example_GPIO_Port GPIOA
 #define Brake_Light_IO_Pin GPIO_PIN_3
 #define Brake_Light_IO_GPIO_Port GPIOA
 #define Horn_IO_Pin GPIO_PIN_4
