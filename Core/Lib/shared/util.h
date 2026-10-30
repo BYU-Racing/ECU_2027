@@ -60,7 +60,6 @@ double pid_next_value(Pid *pid, uint32_t current_time_ms, double target, double 
 uint32_t str_hash(const char *str);
 int64_t map_range(int32_t input_32, int32_t old_min_32, int32_t old_max_32, int32_t new_min_32, int32_t new_max_32);
 
-
 #ifdef __cplusplus
 }
 #endif

@@ -1,6 +1,5 @@
 #include "ecu_logic.h"
 
-#include <stddef.h>
 #include <stdlib.h>
 
 #include "ecu_assert.h"
@@ -284,12 +283,6 @@ static void ecu_handle_startup_sequence(uint32_t current_time_ms) {
         }
     }
 
-    /* catches precharge not completing */
-    static uint32_t vsm_last_rx_ms; 
-    static bool vsm_seen;     
-    if (!vsm_seen || (current_time_ms - vsm_last_rx_ms) > VSM_TIMEOUT_MS) {
-        precharge_complete = false;
-    }
     if (!start_switch_on || !precharge_complete) { 
         car_fully_on = false; 
     }
@@ -315,19 +308,17 @@ void ecu_update(uint32_t current_time_ms){
 }
 
 void ecu_process_message(uint32_t current_time_ms, CAN_message_t msg) {
-    /* If we received a CAN message, update the corresponding value. */
-    if ((MessageId)msg.id == MESSAGE_ID_INTERNAL_STATES) {
-        /* To check VSM internal state. */
-        VsmState vsm_state = parse_motor_internal_states(msg).vsm_state;
-        precharge_complete =
-            vsm_state == VSM_STATE_PRE_CHARGE_COMPLETE ||
-            vsm_state == VSM_STATE_VSM_WAIT ||
-            vsm_state == VSM_STATE_VSM_READY ||
-            vsm_state == VSM_STATE_MOTOR_RUNNING;
+    if (msg.flags.extended || msg.flags.remote) return;
+    if (msg.id != (uint32_t)MESSAGE_ID_INTERNAL_STATES) return;
+    if (msg.len != 8) return;
 
-            vsm_seen = true;
-            vsm_last_rx_ms = current_time_ms;
-    }
+    VsmState vsm_state = parse_motor_internal_states(msg).vsm_state;
+    precharge_complete = vsm_state == VSM_STATE_PRE_CHARGE_COMPLETE ||
+                         vsm_state == VSM_STATE_VSM_WAIT ||
+                         vsm_state == VSM_STATE_VSM_READY ||
+                         vsm_state == VSM_STATE_MOTOR_RUNNING;
+    vsm_seen = true;
+    vsm_last_rx_ms = current_time_ms;
 }
 
 GpioState ecu_poll_gpio_state(uint32_t current_time_ms) {
@@ -385,6 +376,7 @@ bool ecu_poll_can(uint32_t current_time_ms, CAN_message_t *out) {
     return false;
 }
 
+/* Might not need this */
 // Prints pedal state and values
 void pedals_print_state(void) {
     PRINTF("Pedals:\n");
@@ -396,6 +388,7 @@ void pedals_print_state(void) {
     PRINTF("  pedals_implausibility: %s\n", pedals_implausibility.active ? "yes" : "no");
 }
 
+/* Might not need this */
 // Prints ecu state and variables
 void ecu_print_state(void) {
     PRINTF("Ecu:\n");
@@ -403,4 +396,19 @@ void ecu_print_state(void) {
     PRINTF("  start_switch_on: %s\n", start_switch_on ? "yes" : "no");
     PRINTF("  precharge_complete: %s\n", precharge_complete ? "yes" : "no");
     pedals_print_state();
+}
+
+size_t ecu_format_state(char *buf, size_t n, PollTiming poll_timing) {
+    int k = snprintf(buf, n,
+        "car_on = %d -- sw = %d -- precharge = %d\r\nt1 = %u -- t2 = %u -- mapped = %u -- smooth = %u -- brake = %u -- implaus = %d\r\nTiming: can read = %lu -- t1 = %lu -- t2 = %lu -- brake = %lu -- switch = %lu -- can write = %lu -- gpio = %lu -- debug = %lu\r\n\n",
+        car_fully_on, start_switch_on, precharge_complete,
+        (unsigned)throttle_1_position, (unsigned)throttle_2_position,
+        (unsigned)mapped_throttle, (unsigned)smoothed_throttle,
+        (unsigned)brake_position, pedals_implausibility.active, 
+        poll_timing.can_bus_read_timing, poll_timing.throttle_1_timing, 
+        poll_timing.throttle_2_timing, poll_timing.brake_timing,  
+        poll_timing.start_switch_timing, poll_timing.can_bus_write_timing, 
+        poll_timing.gpio_state_timing, poll_timing.debug_timing);
+    if (k < 0) return 0;
+    return ((size_t)k < n) ? (size_t)k : n - 1;
 }

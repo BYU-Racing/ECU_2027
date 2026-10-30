@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "../can/CAN_message_t.h"
 
@@ -50,6 +51,21 @@ void ecu_print_state(void);
 
 /* Prints the current state and variables of Pedals */
 void pedals_print_state(void);
+
+/* Timing evals */
+typedef struct PollTiming {
+  uint32_t throttle_1_timing;
+  uint32_t throttle_2_timing;
+  uint32_t brake_timing;
+  uint32_t can_bus_read_timing;
+  uint32_t start_switch_timing;
+  uint32_t can_bus_write_timing;
+  uint32_t gpio_state_timing;
+  uint32_t debug_timing;
+} PollTiming;
+
+/* Formats state then prints it to the terminal */
+size_t ecu_format_state(char *buf, size_t n, PollTiming poll_timing);
 
 #ifdef __cplusplus
 }

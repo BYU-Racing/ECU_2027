@@ -12,6 +12,8 @@ extern ADC_HandleTypeDef hadc2;
 #define ADC1_CHANNEL_COUNT 2
 #define ADC2_CHANNEL_COUNT 1
 
+extern DMA_HandleTypeDef hdma_adc1;
+
 enum { IDX_THROTTLE_1 = 0, IDX_THROTTLE_2 = 1};
 
 static uint16_t adc_buf[ADC1_CHANNEL_COUNT];
@@ -28,6 +30,13 @@ bool adc_inputs_start(void) {
     if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_buf, ADC1_CHANNEL_COUNT) != HAL_OK) {
         return false;
     }
+
+    if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_buf, ADC1_CHANNEL_COUNT) != HAL_OK) {
+        return false;
+    }
+
+    __HAL_DMA_DISABLE_IT(&hdma_adc1, DMA_IT_TC | DMA_IT_HT);
+    
 
     if (HAL_ADC_Start(&hadc2) != HAL_OK) {
         return false;
@@ -210,4 +219,3 @@ int64_t map_range(int32_t input_32, int32_t old_min_32, int32_t old_max_32, int3
 
     return output_shifted;
 }
-

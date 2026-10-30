@@ -42,12 +42,12 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define POLLING_SENSORS_INTERVAL_MS 30
 
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+#define POLLING_SENSORS_INTERVAL_MS 30
 
 /* USER CODE END PM */
 
@@ -60,7 +60,6 @@ FDCAN_HandleTypeDef hfdcan2;
 FDCAN_HandleTypeDef hfdcan3;
 
 TIM_HandleTypeDef htim3;
-
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -80,25 +79,33 @@ static void MX_ADC2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-// Initializes the assert handler to catch errors
-static void ecu_assert_handler(AssertLevel level, LineInfo line_info, AssertCode error_code) {
-  if (level == ASSERT_LEVEL_SAFETY) {
-    HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, GPIO_PIN_RESET);
-    /* zero torque, inverter off */
-    can_buses_send_shutdown();                       
-    CriticalFault fault = {
-        .error_code = error_code,
-        .assert_failure_line = (uint16_t)line_info.line_no,
-        .file_name_hash = str_hash(line_info.filename),
-    };
-    CAN_message_t msg = create_critical_fault_command(fault);
-    can_bus_write(&DataCAN, &msg);
-    can_bus_service(&DataCAN);
-  } else {
-    //TO DO: implement this, right now nothing calls soft assert
-    //ecu_request_soft_reset(HAL_GetTick());
-    return;
-  }
+/* Latches and continues to send shutdown message */
+static void __attribute__((noreturn)) fault_latch_loop(CAN_message_t fault_msg) {
+    Timer t = { HAL_GetTick(), 15 };
+    for (;;) {
+        if (timer_should_fire(&t, HAL_GetTick())) {
+            /* zero torque, inverter off */
+            can_buses_send_shutdown();         
+            /* ignore "queue full" here */   
+            can_bus_write(&DataCAN, &fault_msg);  
+        }
+        can_bus_service(&MotorCAN);
+        can_bus_service(&DataCAN);
+    }
+}
+
+/* Called when an assert is violated */
+static void ecu_assert_handler(AssertLevel level, LineInfo li, AssertCode code) {
+    if (level == ASSERT_LEVEL_SAFETY) {
+        HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, GPIO_PIN_RESET);
+        can_buses_send_shutdown();
+        CriticalFault fault = { .error_code = code,
+                                .assert_failure_line = (uint16_t)li.line_no,
+                                .file_name_hash = str_hash(li.filename) };
+        CAN_message_t msg = create_critical_fault_command(fault);
+        can_bus_write(&DataCAN, &msg);
+        fault_latch_loop(msg);                    /* never returns */
+    }
 }
 
 // Terminal printing
@@ -107,15 +114,10 @@ extern volatile uint8_t usb_dtr;
 // Low level print function called after PRINTF()
 int _write(int file, char *ptr, int len)
 {
+    (void)file; (void)ptr;
     // Only prints if terminal is open
     if (hUsbDeviceFS.dev_state != USBD_STATE_CONFIGURED || !usb_dtr) {
         return len;
-    }
-
-    // Breaks if waiting too long to send
-    uint32_t start = HAL_GetTick();
-    while (CDC_Transmit_FS((uint8_t*)ptr, len) == USBD_BUSY) {
-        if (HAL_GetTick() - start > 10) break;
     }
     return len;
 }
@@ -130,6 +132,10 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
 
   //TO DO: implement these
   //Timer broadcast_build_info_timer = { .last_fired_at = 0, .duration_ms = BROADCAST_INFO_INTERVAL_MS };
@@ -151,15 +157,6 @@ int main(void)
   // First things first, register the panic handler. If something goes
   // wrong during setup, we'll wind everything down.
   ecu_register_assert_failed_handler(ecu_assert_handler);
-
-  // Terminal printing init
-  HAL_Delay(1500);
-  setvbuf(stdout, NULL, _IONBF, 0);
-  PRINTF("Terminal printing initialized.\r\n");
-
-  PRINTF("============================================");
-  PRINTF("==========Motor CAN initialized=============");
-  PRINTF("============================================\n");
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -179,6 +176,16 @@ int main(void)
   MX_ADC2_Init();
   MX_USB_Device_Init();
   /* USER CODE BEGIN 2 */
+  __HAL_RCC_CRS_CLK_ENABLE();
+  RCC_CRSInitTypeDef crs = {0};
+  crs.Prescaler             = RCC_CRS_SYNC_DIV1;
+  crs.Source                = RCC_CRS_SYNC_SOURCE_USB;
+  crs.Polarity              = RCC_CRS_SYNC_POLARITY_RISING;
+  crs.ReloadValue           = __HAL_RCC_CRS_RELOADVALUE_CALCULATE(48000000, 1000);
+  crs.ErrorLimitValue       = RCC_CRS_ERRORLIMIT_DEFAULT;
+  crs.HSI48CalibrationValue = RCC_CRS_HSI48CALIBRATION_DEFAULT;
+  HAL_RCCEx_CRSConfig(&crs);
+
   // Starts the CAN buses
   can_buses_init();
   // Start the ADC calibration
@@ -186,7 +193,15 @@ int main(void)
     Error_Handler(); 
   }
 
-  
+  // Terminal printing init
+  setvbuf(stdout, NULL, _IONBF, 0);
+  static bool last_dtr;
+  if (usb_dtr && !last_dtr) {
+      PRINTF("=== ECU 2027 ===\r\nMotor CAN initialized\r\n");
+  }
+  last_dtr = usb_dtr;
+
+  PollTiming poll_timing;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -204,20 +219,27 @@ int main(void)
     while (can_bus_read(&MotorCAN, &rmsg)) { 
       ecu_process_message(current_time_ms, rmsg); 
     }
+    poll_timing.can_bus_read_timing = current_time_ms - HAL_GetTick();
 
     /* Check if any sensors need to send values down the CAN bus, and
     * if so, send them. */
     if (timer_should_fire(&throttle1_timer, current_time_ms)) {
         pedals_input_throttle_one_position(current_time_ms, read_throttle_1());
     }
+    poll_timing.throttle_1_timing = current_time_ms - HAL_GetTick();
+  
 
     if (timer_should_fire(&throttle2_timer, current_time_ms)) {
         pedals_input_throttle_two_position(current_time_ms, read_throttle_2());
     }
+    poll_timing.throttle_2_timing = current_time_ms - HAL_GetTick();
+  
 
     if (timer_should_fire(&brake_timer, current_time_ms)) {
         pedals_input_brake_position(current_time_ms, read_brake());
     }
+    poll_timing.brake_timing = current_time_ms - HAL_GetTick();
+  
 
     if (timer_should_fire(&start_switch_timer, current_time_ms)) {
         if (HAL_GPIO_ReadPin(SW_1_GPIO_Port, SW_1_Pin) == GPIO_PIN_SET) {
@@ -226,20 +248,27 @@ int main(void)
           ecu_reset_start_switch();
          }
     }
+    poll_timing.start_switch_timing = current_time_ms - HAL_GetTick();
+  
 
     /* Generate all outgoing messages and send each. */
     CAN_message_t to_send;
     ecu_update(current_time_ms);
     while (ecu_poll_can(current_time_ms, &to_send)){
-      if (!can_bus_write(&MotorCAN, &to_send)){
-        LineInfo line_info = {__FILE__, __LINE__};
-        ecu_assert_failed(ASSERT_LEVEL_SAFETY, line_info, ASSERT_CODE_BAD_MESSAGE);
-      } 
+      if (!can_bus_write(&MotorCAN, &to_send)) {
+        ecu_assert_failed(ASSERT_LEVEL_SAFETY, CAPTURE_LINE_INFO(), ASSERT_CODE_CAN_TX_FULL);
+      }
     }
+    /* Sends any available messages */
+    can_bus_service(&MotorCAN);
+    poll_timing.can_bus_write_timing = current_time_ms - HAL_GetTick();
+  
 
     GpioState state = ecu_poll_gpio_state(current_time_ms);
     HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, state.horn_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(Brake_Light_IO_GPIO_Port, Brake_Light_IO_Pin, state.brake_light_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    poll_timing.gpio_state_timing = current_time_ms - HAL_GetTick();
+
 
     // TO DO: Added to broadcast who flashed code to the ECU. Currently doens't work.
     // if (broadcast_build_info_timer.shouldFire(current_time_ms)) {
@@ -249,8 +278,16 @@ int main(void)
     // }
 
     if (timer_should_fire(&debug_pacing, current_time_ms)) {
-        ecu_print_state();
+      static char debug[200];
+      USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef *)hUsbDeviceFS.pClassData;
+      if (hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED && usb_dtr &&
+          hcdc != NULL && hcdc->TxState == 0) {
+          size_t n = ecu_format_state(debug, sizeof debug, poll_timing);
+          if (n) CDC_Transmit_FS((uint8_t *)debug, (uint16_t)n);
+      }
     }
+    poll_timing.debug_timing = current_time_ms - HAL_GetTick();
+
   }
   /* USER CODE END 3 */
 }
@@ -296,7 +333,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_8) != HAL_OK)
   {
     Error_Handler();
   }
@@ -683,9 +720,13 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
-  can_buses_send_shutdown();
+  HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, GPIO_PIN_RESET);
   while (1)
   {
+    can_buses_send_shutdown();
+    can_bus_service(&MotorCAN);
+    uint32_t start = DWT->CYCCNT;
+    while ((DWT->CYCCNT - start) < (SystemCoreClock / 1000u) * 15u) { }
   }
   /* USER CODE END Error_Handler_Debug */
 }

@@ -58,13 +58,15 @@ typedef enum AssertCode {
     ASSERT_CODE_BAD_MESSAGE = 2,
     ASSERT_CODE_INTEGER_OVERFLOW = 3,
     ASSERT_CODE_HAL_PARAM = 4,
+    ASSERT_CODE_CAN_TX_FULL = 5,
     /* Codes 5-20 are reserved for future general messages. */
     ASSERT_CODE_BRAKE_AND_THROTTLE_PRESSED = 20,
     ASSERT_CODE_THROTTLE_OUT_OF_RANGE = 21,
     ASSERT_CODE_THROTTLE_SENSORS_DIVERGED = 22,
     /* T.4.2.11(b), 2026 rules. */
     ASSERT_CODE_PEDAL_TIMEOUT = 23,
-    ASSERT_CODE_BRAKE_SENSOR_FAULT = 24
+    ASSERT_CODE_BRAKE_SENSOR_FAULT = 24,
+    ASSERT_CODE_ADC_STALLED = 25
 } AssertCode;
 
 /* Function type for the assertion failure handler. */

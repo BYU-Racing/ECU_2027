@@ -42,6 +42,9 @@ file(GLOB_RECURSE USER_LIB_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/Core/Lib/*.c
 )
 
+set_source_files_properties(${USER_LIB_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "-Wextra;-Wshadow")
+
 # Link directories setup
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
