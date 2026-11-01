@@ -111,13 +111,10 @@ static void ecu_assert_handler(AssertLevel level, LineInfo li, AssertCode code) 
 // Terminal printing
 extern USBD_HandleTypeDef hUsbDeviceFS;
 extern volatile uint8_t usb_dtr;
-// Low level print function called after PRINTF()
-int _write(int file, char *ptr, int len)
-{
-    (void)file; (void)ptr;
-    // Only prints if terminal is open
-    if (hUsbDeviceFS.dev_state != USBD_STATE_CONFIGURED || !usb_dtr) {
-        return len;
+// Low level print function called after PRINTF(), uses debug wire SWO instead
+int _write(int file, char *ptr, int len) {
+    for (int i = 0; i < len; i++) {
+        ITM_SendChar(*ptr++);
     }
     return len;
 }
@@ -130,8 +127,11 @@ int _write(int file, char *ptr, int len)
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
+
+  /* For testing, should turn on the led*/
+  HAL_GPIO_WritePin(LED_1_GPIO_Port, LED_1_Pin, GPIO_PIN_SET);
+
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
   DWT->CYCCNT = 0;
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
@@ -203,7 +203,6 @@ int main(void)
 
   PollTiming poll_timing;
   /* USER CODE END 2 */
-
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
