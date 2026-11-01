@@ -21,26 +21,6 @@ void can_buses_init(void) {
     }
 }
 
-void can_buses_send_shutdown(void) {
-    /* Don't touch the bus if it was never started (Error_Handler can fire
-     * during early init, before can_buses_init() has run). */
-    if (MotorCAN.hfdcan == NULL || MotorCAN.hfdcan->State != HAL_FDCAN_STATE_BUSY) {
-        return;
-    }
-
-    /* Shut everything down. */
-    uint8_t control_command_message_length = 8;
-
-    CAN_message_t message = {0};
-    message.id  = MESSAGE_ID_CONTROL_COMMAND;   /* MESSAGE_ID_CONTROL_COMMAND: all zeroes = zero torque, inverter off */
-    message.len = control_command_message_length;
-
-    /* drop queued torque commands */
-    MotorCAN.tx_tail = MotorCAN.tx_head;      
-    can_bus_write(&MotorCAN, &message);
-    can_bus_service(&MotorCAN);
-}
-
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs) {
     // If the callback was called for a reason other than a new message, we don't care.
     if (!(RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE)) {

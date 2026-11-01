@@ -47,6 +47,7 @@
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 #define POLLING_SENSORS_INTERVAL_MS 30
+#define ASSERT_HANDLER_DELAY_MS 250
 
 /* USER CODE END PM */
 
@@ -79,38 +80,34 @@ static void MX_ADC2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-/* Latches and continues to send shutdown message */
-static void __attribute__((noreturn)) fault_latch_loop(CAN_message_t fault_msg) {
-    Timer t = { HAL_GetTick(), 15 };
-    for (;;) {
-        if (timer_should_fire(&t, HAL_GetTick())) {
-            /* zero torque, inverter off */
-            can_buses_send_shutdown();         
-            /* ignore "queue full" here */   
-            can_bus_write(&DataCAN, &fault_msg);  
-        }
-        can_bus_service(&MotorCAN);
-        can_bus_service(&DataCAN);
-    }
-}
 
 /* Called when an assert is violated */
-static void ecu_assert_handler(AssertLevel level, LineInfo li, AssertCode code) {
+static void ecu_assert_handler(AssertLevel level, LineInfo line_info, AssertCode code) {
     if (level == ASSERT_LEVEL_SAFETY) {
-        HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, GPIO_PIN_RESET);
-        can_buses_send_shutdown();
-        CriticalFault fault = { .error_code = code,
-                                .assert_failure_line = (uint16_t)li.line_no,
-                                .file_name_hash = str_hash(li.filename) };
-        CAN_message_t msg = create_critical_fault_command(fault);
-        can_bus_write(&DataCAN, &msg);
-        fault_latch_loop(msg);                    /* never returns */
+      // Turns horn off
+      HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, GPIO_PIN_RESET);
+
+      /* Creates a shutdown message (all zeros) to send on the MotorCAN, effectively turning off the motor */
+      CAN_message_t shutdown_message = empty_can_message(MESSAGE_ID_CONTROL_COMMAND, 8);
+
+      /* Creates a can message with fault data to send along the DataCAN line 
+      * with error code, line of code where the error took place and file name */
+      CriticalFault fault = { .error_code = code, .assert_failure_line = (uint16_t)line_info.line_no, .file_name_hash = str_hash(line_info.filename) };
+      CAN_message_t fault_message = create_critical_fault_command(fault);
+      
+      /* Repeatedly sends both error message and 0 torque command to DataCAN and MotorCAN respectively.
+      * Also will blink the LED on board rapidly */
+      while (true) {
+        can_bus_write(&MotorCAN, &shutdown_message);
+        can_bus_service(&MotorCAN);
+        can_bus_write(&DataCAN, &fault_message);
+        can_bus_service(&DataCAN);
+        HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
+        HAL_Delay(ASSERT_HANDLER_DELAY_MS);
+      }
     }
 }
 
-// Terminal printing
-extern USBD_HandleTypeDef hUsbDeviceFS;
-extern volatile uint8_t usb_dtr;
 // Low level print function called after PRINTF(), uses debug wire SWO instead
 int _write(int file, char *ptr, int len) {
     for (int i = 0; i < len; i++) {
