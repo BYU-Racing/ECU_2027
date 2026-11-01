@@ -62,7 +62,6 @@ TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
 uint32_t start_time;
-uint32_t end_time;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -193,33 +192,37 @@ int main(void)
     uint32_t current_time_ms = HAL_GetTick();
     
     /* Reads and processes MotorCAN messages then logs timing */
+    start_time = HAL_GetTick();
     CAN_message_t rmsg;
     while (can_bus_read(&MotorCAN, &rmsg)) { 
       ecu_process_message(current_time_ms, rmsg); 
     }
-    poll_timing.can_bus_read_timing = current_time_ms - HAL_GetTick();
+    poll_timing.can_bus_read_timing = HAL_GetTick() - start_time;
 
 
     /* Check if any sensors need to send values down the CAN bus, and
     * if so, send them, then logs timing.*/
+    start_time = HAL_GetTick();
     if (timer_should_fire(&throttle1_timer, current_time_ms)) {
         pedals_input_throttle_one_position(current_time_ms, read_throttle_1());
     }
-    poll_timing.throttle_1_timing = current_time_ms - HAL_GetTick();
+    poll_timing.throttle_1_timing = HAL_GetTick() - start_time;
   
 
+    start_time = HAL_GetTick();
     if (timer_should_fire(&throttle2_timer, current_time_ms)) {
         pedals_input_throttle_two_position(current_time_ms, read_throttle_2());
     }
-    poll_timing.throttle_2_timing = current_time_ms - HAL_GetTick();
+    poll_timing.throttle_2_timing = HAL_GetTick() - start_time;
   
-
+    start_time = HAL_GetTick();
     if (timer_should_fire(&brake_timer, current_time_ms)) {
         pedals_input_brake_position(current_time_ms, read_brake());
     }
-    poll_timing.brake_timing = current_time_ms - HAL_GetTick();
+    poll_timing.brake_timing = HAL_GetTick() - start_time;
   
     /* Reads switch value and updates ECU variables */
+    start_time = HAL_GetTick();
     if (timer_should_fire(&start_switch_timer, current_time_ms)) {
         if (HAL_GPIO_ReadPin(SW_1_GPIO_Port, SW_1_Pin) == GPIO_PIN_SET) {
           ecu_set_start_switch();
@@ -227,10 +230,11 @@ int main(void)
           ecu_reset_start_switch();
          }
     }
-    poll_timing.start_switch_timing = current_time_ms - HAL_GetTick();
+    poll_timing.start_switch_timing = HAL_GetTick() - start_time;
   
 
     /* Updates pedal data startup data before generating and sending torque command message */
+    start_time = HAL_GetTick();
     ecu_handle_startup_sequence(current_time_ms); 
     pedals_poll(current_time_ms); 
     /* Generate all outgoing messages and send each then logs timing */
@@ -242,20 +246,21 @@ int main(void)
     }
     /* Sends any available messages */
     can_bus_service(&MotorCAN);
-    poll_timing.can_bus_write_timing = current_time_ms - HAL_GetTick();
+    poll_timing.can_bus_write_timing = HAL_GetTick() - start_time;
   
 
     /* Updates GpioState variables and logs timing */
+    start_time = HAL_GetTick();
     GpioState state = ecu_poll_gpio_state(current_time_ms);
     HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, state.horn_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(Brake_Light_IO_GPIO_Port, Brake_Light_IO_Pin, state.brake_light_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
     poll_timing.gpio_state_timing = current_time_ms - HAL_GetTick();
 
-
+    start_time = HAL_GetTick();
     if (timer_should_fire(&debug_pacing, current_time_ms)) {
       ecu_print_state();
     }
-    poll_timing.debug_timing = current_time_ms - HAL_GetTick();
+    poll_timing.debug_timing = HAL_GetTick() - start_time;
 
   }
   /* USER CODE END 3 */
