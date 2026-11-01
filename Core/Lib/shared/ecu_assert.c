@@ -18,10 +18,4 @@ void ecu_register_assert_failed_handler(ecu_assert_failed_handler_t handler)
 
 void ecu_assert_failed( AssertLevel level, LineInfo line_info, AssertCode error_code){
     ecu_current_handler(level, line_info, error_code);
-
-    if (level == ASSERT_LEVEL_SAFETY) {
-        for (;;) {
-            // TO DO: currently a latched assert handler, find a better way
-        }
-    }
 }

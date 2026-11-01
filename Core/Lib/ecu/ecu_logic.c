@@ -14,17 +14,8 @@
 /* Pedals state                                                            */
 /* ====================================================================== */
 
-/* If an implausibility occurs (2026 rules, T.4.2.4), we save its details so
- * that if it lasts too long we can report what it was and where it came from.
- * `active` replaces the old std::optional. */
-typedef struct ImplausibilityDetails {
-    bool active;
-    LineInfo line_info;
-    uint32_t happened_at_ms;
-    AssertCode code;
-} ImplausibilityDetails;
-
 static ImplausibilityDetails pedals_implausibility;
+PollTiming poll_timing;
 
 /* Message timeouts (if it's been too long since a pedal message, we panic). */
 static Trigger pedals_too_long_since_throttle_1;
@@ -302,11 +293,6 @@ static void ecu_handle_startup_sequence(uint32_t current_time_ms) {
     }
 }
 
-void ecu_update(uint32_t current_time_ms){ 
-    ecu_handle_startup_sequence(current_time_ms); 
-    pedals_poll(current_time_ms); 
-}
-
 void ecu_process_message(uint32_t current_time_ms, CAN_message_t msg) {
     if (msg.flags.extended || msg.flags.remote) return;
     if (msg.id != (uint32_t)MESSAGE_ID_INTERNAL_STATES) return;
@@ -376,31 +362,9 @@ bool ecu_poll_can(uint32_t current_time_ms, CAN_message_t *out) {
     return false;
 }
 
-/* Might not need this */
-// Prints pedal state and values
-void pedals_print_state(void) {
-    PRINTF("Pedals:\n");
-    PRINTF("  throttle_1_position: %u\n", throttle_1_position);
-    PRINTF("  throttle_2_position: %u\n", throttle_2_position);
-    PRINTF("  mapped_throttle: %u\n", mapped_throttle);
-    PRINTF("  smoothed_throttle: %u\n", smoothed_throttle);
-    PRINTF("  brake_position: %u\n", brake_position);
-    PRINTF("  pedals_implausibility: %s\n", pedals_implausibility.active ? "yes" : "no");
-}
-
-/* Might not need this */
-// Prints ecu state and variables
+/* Prints all relevant ECU info to the terminal (SWO pin), not pretty but efficient */
 void ecu_print_state(void) {
-    PRINTF("Ecu:\n");
-    PRINTF("  car_fully_on: %s\n", car_fully_on ? "yes" : "no");
-    PRINTF("  start_switch_on: %s\n", start_switch_on ? "yes" : "no");
-    PRINTF("  precharge_complete: %s\n", precharge_complete ? "yes" : "no");
-    pedals_print_state();
-}
-
-size_t ecu_format_state(char *buf, size_t n, PollTiming poll_timing) {
-    int k = snprintf(buf, n,
-        "car_on = %d -- sw = %d -- precharge = %d\r\nt1 = %u -- t2 = %u -- mapped = %u -- smooth = %u -- brake = %u -- implaus = %d\r\nTiming: can read = %lu -- t1 = %lu -- t2 = %lu -- brake = %lu -- switch = %lu -- can write = %lu -- gpio = %lu -- debug = %lu\r\n\n",
+    PRINTF("car_on = %d -- sw = %d -- precharge = %d\r\nt1 = %u -- t2 = %u -- mapped = %u -- smooth = %u -- brake = %u -- implaus = %d\r\nTiming: can read = %lu -- t1 = %lu -- t2 = %lu -- brake = %lu -- switch = %lu -- can write = %lu -- gpio = %lu -- debug = %lu\r\n\n",
         car_fully_on, start_switch_on, precharge_complete,
         (unsigned)throttle_1_position, (unsigned)throttle_2_position,
         (unsigned)mapped_throttle, (unsigned)smoothed_throttle,
@@ -409,6 +373,4 @@ size_t ecu_format_state(char *buf, size_t n, PollTiming poll_timing) {
         poll_timing.throttle_2_timing, poll_timing.brake_timing,  
         poll_timing.start_switch_timing, poll_timing.can_bus_write_timing, 
         poll_timing.gpio_state_timing, poll_timing.debug_timing);
-    if (k < 0) return 0;
-    return ((size_t)k < n) ? (size_t)k : n - 1;
 }

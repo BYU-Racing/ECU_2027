@@ -16,9 +16,11 @@ void can_buses_init(void) {
     if (!can_bus_start(&DataCAN)) {
         Error_Handler();
     }
+    PRINTF("DataCAN initialized\n\n");
     if (!can_bus_start(&MotorCAN)) {
         Error_Handler();
     }
+    PRINTF("MotorCAN initialized\n\n");
 }
 
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs) {

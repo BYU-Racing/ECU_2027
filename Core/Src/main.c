@@ -21,7 +21,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "usbd_cdc_if.h"
 #include <stdio.h>
 
 #include "../Lib/shared/ecu_assert.h"
@@ -62,7 +61,8 @@ FDCAN_HandleTypeDef hfdcan3;
 TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
-
+uint32_t start_time;
+uint32_t end_time;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -124,26 +124,21 @@ int _write(int file, char *ptr, int len) {
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
 
-  /* For testing, should turn on the led*/
+  /* For testing, should turn on the led onboard */
   HAL_GPIO_WritePin(LED_1_GPIO_Port, LED_1_Pin, GPIO_PIN_SET);
 
-  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-  DWT->CYCCNT = 0;
-  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-
-
-  //TO DO: implement these
-  //Timer broadcast_build_info_timer = { .last_fired_at = 0, .duration_ms = BROADCAST_INFO_INTERVAL_MS };
+  /* Initializes timer to print debug messages to the terminal */
   Timer debug_pacing = { .last_fired_at = 0, .duration_ms = 500 };
 
-  /* All these timers control how often messages are emitted for each of these sensors. */
+  /* All these timers control how often messages are emitted for each of these sensors 
+  * or how often each sensor value should be checked */
   Timer throttle1_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
   Timer throttle2_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
   Timer brake_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
   Timer start_switch_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -173,32 +168,17 @@ int main(void)
   MX_TIM3_Init();
   MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
-  __HAL_RCC_CRS_CLK_ENABLE();
-  RCC_CRSInitTypeDef crs = {0};
-  crs.Prescaler             = RCC_CRS_SYNC_DIV1;
-  crs.Source                = RCC_CRS_SYNC_SOURCE_USB;
-  crs.Polarity              = RCC_CRS_SYNC_POLARITY_RISING;
-  crs.ReloadValue           = __HAL_RCC_CRS_RELOADVALUE_CALCULATE(48000000, 1000);
-  crs.ErrorLimitValue       = RCC_CRS_ERRORLIMIT_DEFAULT;
-  crs.HSI48CalibrationValue = RCC_CRS_HSI48CALIBRATION_DEFAULT;
-  HAL_RCCEx_CRSConfig(&crs);
-
-  // Starts the CAN buses
+  /* Starts the CAN buses */
   can_buses_init();
-  // Start the ADC calibration
+
+  /* Start the ADC calibration */
   if (!adc_inputs_start()) { 
     Error_Handler(); 
   }
 
-  // Terminal printing init
-  setvbuf(stdout, NULL, _IONBF, 0);
-  static bool last_dtr;
-  if (usb_dtr && !last_dtr) {
-      PRINTF("=== ECU 2027 ===\r\nMotor CAN initialized\r\n");
-  }
-  last_dtr = usb_dtr;
+  /* Terminal printing init */
+  PRINTF("=== ECU 2027 ===\r\nMotor CAN initialized\r\n");
 
-  PollTiming poll_timing;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -212,14 +192,16 @@ int main(void)
       * so we always have to tell it what time it is. */
     uint32_t current_time_ms = HAL_GetTick();
     
+    /* Reads and processes MotorCAN messages then logs timing */
     CAN_message_t rmsg;
     while (can_bus_read(&MotorCAN, &rmsg)) { 
       ecu_process_message(current_time_ms, rmsg); 
     }
     poll_timing.can_bus_read_timing = current_time_ms - HAL_GetTick();
 
+
     /* Check if any sensors need to send values down the CAN bus, and
-    * if so, send them. */
+    * if so, send them, then logs timing.*/
     if (timer_should_fire(&throttle1_timer, current_time_ms)) {
         pedals_input_throttle_one_position(current_time_ms, read_throttle_1());
     }
@@ -237,7 +219,7 @@ int main(void)
     }
     poll_timing.brake_timing = current_time_ms - HAL_GetTick();
   
-
+    /* Reads switch value and updates ECU variables */
     if (timer_should_fire(&start_switch_timer, current_time_ms)) {
         if (HAL_GPIO_ReadPin(SW_1_GPIO_Port, SW_1_Pin) == GPIO_PIN_SET) {
           ecu_set_start_switch();
@@ -248,9 +230,11 @@ int main(void)
     poll_timing.start_switch_timing = current_time_ms - HAL_GetTick();
   
 
-    /* Generate all outgoing messages and send each. */
+    /* Updates pedal data startup data before generating and sending torque command message */
+    ecu_handle_startup_sequence(current_time_ms); 
+    pedals_poll(current_time_ms); 
+    /* Generate all outgoing messages and send each then logs timing */
     CAN_message_t to_send;
-    ecu_update(current_time_ms);
     while (ecu_poll_can(current_time_ms, &to_send)){
       if (!can_bus_write(&MotorCAN, &to_send)) {
         ecu_assert_failed(ASSERT_LEVEL_SAFETY, CAPTURE_LINE_INFO(), ASSERT_CODE_CAN_TX_FULL);
@@ -261,27 +245,15 @@ int main(void)
     poll_timing.can_bus_write_timing = current_time_ms - HAL_GetTick();
   
 
+    /* Updates GpioState variables and logs timing */
     GpioState state = ecu_poll_gpio_state(current_time_ms);
     HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, state.horn_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(Brake_Light_IO_GPIO_Port, Brake_Light_IO_Pin, state.brake_light_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
     poll_timing.gpio_state_timing = current_time_ms - HAL_GetTick();
 
 
-    // TO DO: Added to broadcast who flashed code to the ECU. Currently doens't work.
-    // if (broadcast_build_info_timer.shouldFire(current_time_ms)) {
-    //     can_bus_write(&MotorCAN, &create_code_hash_message(GIT_COMMIT_HASH_U64));
-    //     can_bus_write(&MotorCAN, &create_commit_author_message(GIT_COMMIT_AUTHOR));
-    //     can_bus_write(&MotorCAN, &create_uploader_message(GIT_UPLOADER));
-    // }
-
     if (timer_should_fire(&debug_pacing, current_time_ms)) {
-      static char debug[200];
-      USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef *)hUsbDeviceFS.pClassData;
-      if (hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED && usb_dtr &&
-          hcdc != NULL && hcdc->TxState == 0) {
-          size_t n = ecu_format_state(debug, sizeof debug, poll_timing);
-          if (n) CDC_Transmit_FS((uint8_t *)debug, (uint16_t)n);
-      }
+      ecu_print_state();
     }
     poll_timing.debug_timing = current_time_ms - HAL_GetTick();
 

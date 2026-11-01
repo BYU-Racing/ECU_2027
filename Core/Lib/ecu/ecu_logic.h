@@ -18,6 +18,16 @@ extern "C" {
  * maintaining safety features of the sensors, like value timeouts and out of
  * range failures. */
 
+/* If an implausibility occurs (2026 rules, T.4.2.4), we save its details so
+* that if it lasts too long we can report what it was and where it came from.
+* `active` replaces the old std::optional. */
+typedef struct ImplausibilityDetails {
+  bool active;
+  LineInfo line_info;
+  uint32_t happened_at_ms;
+  AssertCode code;
+} ImplausibilityDetails;
+
 void pedals_poll(uint32_t current_time_ms);
 void pedals_input_throttle_one_position(uint32_t current_time_ms, uint16_t value);
 void pedals_input_throttle_two_position(uint32_t current_time_ms, uint16_t value);
@@ -47,10 +57,7 @@ bool ecu_poll_can(uint32_t current_time_ms, CAN_message_t *out);
 GpioState ecu_poll_gpio_state(uint32_t current_time_ms);
 
 /* Prints the current state and variables of ECU */
-void ecu_print_state(void);
-
-/* Prints the current state and variables of Pedals */
-void pedals_print_state(void);
+void ecu_print_state();
 
 /* Timing evals */
 typedef struct PollTiming {
@@ -63,6 +70,8 @@ typedef struct PollTiming {
   uint32_t gpio_state_timing;
   uint32_t debug_timing;
 } PollTiming;
+
+extern struct PollTiming poll_timing;
 
 /* Formats state then prints it to the terminal */
 size_t ecu_format_state(char *buf, size_t n, PollTiming poll_timing);

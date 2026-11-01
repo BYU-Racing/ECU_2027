@@ -9,10 +9,6 @@
 /* COMMUNICATIONS */
 /* The can baud rate should be 250000, this is defined in cubemx but a not is made here */
 
-/* Interval between broadcasting the system build info. */
-#define BROADCAST_INFO_INTERVAL_MS 1000
-
-
 /* THROTTLE CONSTANTS */
 
 /* How long we tolerate between receiving pedal values until we panic. */
