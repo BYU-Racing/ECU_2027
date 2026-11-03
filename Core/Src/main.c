@@ -45,8 +45,6 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define POLLING_SENSORS_INTERVAL_MS 30
-#define ASSERT_HANDLER_DELAY_MS 250
 
 /* USER CODE END PM */
 
@@ -133,10 +131,11 @@ int main(void)
 
   /* All these timers control how often messages are emitted for each of these sensors 
   * or how often each sensor value should be checked */
-  Timer throttle1_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
-  Timer throttle2_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
+  Timer throttle1_timer = { .last_fired_at = 0, .duration_ms = POLLING_APPS_INTERVAL_MS };
+  Timer throttle2_timer = { .last_fired_at = 0, .duration_ms = POLLING_APPS_INTERVAL_MS };
   Timer brake_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
   Timer start_switch_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
+  Timer pump_pwm_timer = { .last_fired_at = 0, .duration_ms = PUMP_PWM_UPDATE_INTERVAL_MS };
 
   /* USER CODE END 1 */
 
@@ -202,35 +201,41 @@ int main(void)
 
     /* Check if any sensors need to send values down the CAN bus, and
     * if so, send them, then logs timing.*/
-    start_time = HAL_GetTick();
     if (timer_should_fire(&throttle1_timer, current_time_ms)) {
-        pedals_input_throttle_one_position(current_time_ms, read_throttle_1());
+      start_time = HAL_GetTick();
+      pedals_input_throttle_one_position(current_time_ms, read_throttle_1());
+      poll_timing.throttle_1_timing = HAL_GetTick() - start_time;
     }
-    poll_timing.throttle_1_timing = HAL_GetTick() - start_time;
   
 
-    start_time = HAL_GetTick();
     if (timer_should_fire(&throttle2_timer, current_time_ms)) {
+        start_time = HAL_GetTick();
         pedals_input_throttle_two_position(current_time_ms, read_throttle_2());
+        poll_timing.throttle_2_timing = HAL_GetTick() - start_time;
     }
-    poll_timing.throttle_2_timing = HAL_GetTick() - start_time;
   
-    start_time = HAL_GetTick();
     if (timer_should_fire(&brake_timer, current_time_ms)) {
+        start_time = HAL_GetTick();
         pedals_input_brake_position(current_time_ms, read_brake());
+        poll_timing.brake_timing = HAL_GetTick() - start_time;
     }
-    poll_timing.brake_timing = HAL_GetTick() - start_time;
+
+    if (timer_should_fire(&pump_pwm_timer, current_time_ms)) {
+      start_time = HAL_GetTick();
+      // TO DO: figure out pwm implementation
+      poll_timing.pump_timing = HAL_GetTick() - start_time;
+    }
   
     /* Reads switch value and updates ECU variables */
-    start_time = HAL_GetTick();
     if (timer_should_fire(&start_switch_timer, current_time_ms)) {
-        if (HAL_GPIO_ReadPin(SW_1_GPIO_Port, SW_1_Pin) == GPIO_PIN_SET) {
-          ecu_set_start_switch();
-         } else {
-          ecu_reset_start_switch();
-         }
+      start_time = HAL_GetTick();
+      if (HAL_GPIO_ReadPin(SW_1_GPIO_Port, SW_1_Pin) == GPIO_PIN_SET) {
+        ecu_set_start_switch();
+        } else {
+        ecu_reset_start_switch();
+        }
+      poll_timing.start_switch_timing = HAL_GetTick() - start_time;
     }
-    poll_timing.start_switch_timing = HAL_GetTick() - start_time;
   
 
     /* Updates pedal data startup data before generating and sending torque command message */
@@ -256,11 +261,11 @@ int main(void)
     HAL_GPIO_WritePin(Brake_Light_IO_GPIO_Port, Brake_Light_IO_Pin, state.brake_light_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
     poll_timing.gpio_state_timing = current_time_ms - HAL_GetTick();
 
-    start_time = HAL_GetTick();
     if (timer_should_fire(&debug_pacing, current_time_ms)) {
+      start_time = HAL_GetTick();
       ecu_print_state();
+      poll_timing.debug_timing = HAL_GetTick() - start_time;
     }
-    poll_timing.debug_timing = HAL_GetTick() - start_time;
 
   }
   /* USER CODE END 3 */
@@ -692,14 +697,19 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
-  __disable_irq();
+  // Turns horn off
   HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, GPIO_PIN_RESET);
+
+  /* Creates a shutdown message (all zeros) to send on the MotorCAN, effectively turning off the motor */
+  CAN_message_t shutdown_message = empty_can_message(MESSAGE_ID_CONTROL_COMMAND, 8);
+
+  __disable_irq();
   while (1)
   {
-    can_buses_send_shutdown();
+    can_bus_write(&MotorCAN, &shutdown_message);
     can_bus_service(&MotorCAN);
-    uint32_t start = DWT->CYCCNT;
-    while ((DWT->CYCCNT - start) < (SystemCoreClock / 1000u) * 15u) { }
+    HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
+    HAL_Delay(ASSERT_HANDLER_DELAY_MS);
   }
   /* USER CODE END Error_Handler_Debug */
 }

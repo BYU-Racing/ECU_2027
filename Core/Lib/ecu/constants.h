@@ -2,9 +2,15 @@
 
 #include <stdint.h>
 
+/* POLLING */
+#define POLLING_SENSORS_INTERVAL_MS 30
+#define POLLING_APPS_INTERVAL_MS 30
+#define PUMP_PWM_UPDATE_INTERVAL_MS 1000
+
 
 /* ASSERTS */
 #define SOFT_RESET_LENGTH_MS 2000
+#define ASSERT_HANDLER_DELAY_MS 250
 
 /* COMMUNICATIONS */
 /* The can baud rate should be 250000, this is defined in cubemx but a not is made here */

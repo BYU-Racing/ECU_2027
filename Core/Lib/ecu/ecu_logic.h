@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "../can/CAN_message_t.h"
+#include "../shared/ecu_assert.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,7 +47,11 @@ typedef struct {
   bool brake_light_on;
 } GpioState;
 
-/* Feed every received CAN message through this */
+/* Handles startup and shutdown sequence that are controlled but the start switch and vsm CAN commands as well as the horn output. */
+void ecu_handle_startup_sequence(uint32_t current_time_ms);
+
+
+/* Feed every received CAN message through this. Checks for certain flags (vsm) and updates local variables */
 void ecu_process_message(uint32_t current_time_ms, CAN_message_t msg);
 
 /* The caller of this should continously call this until it returns
@@ -54,16 +59,18 @@ void ecu_process_message(uint32_t current_time_ms, CAN_message_t msg);
   * along the CAN bus. */
 bool ecu_poll_can(uint32_t current_time_ms, CAN_message_t *out);
 
+/* Handles the updating of horn and brake light GPIO variables */
 GpioState ecu_poll_gpio_state(uint32_t current_time_ms);
 
-/* Prints the current state and variables of ECU */
+/* Prints the current state and variables of ECU as well as the timing for each function in main */
 void ecu_print_state();
 
-/* Timing evals */
+/* Timing evals, holds the ms time of how long each section of the poll took */
 typedef struct PollTiming {
   uint32_t throttle_1_timing;
   uint32_t throttle_2_timing;
   uint32_t brake_timing;
+  uint32_t pump_timing;
   uint32_t can_bus_read_timing;
   uint32_t start_switch_timing;
   uint32_t can_bus_write_timing;
@@ -73,8 +80,10 @@ typedef struct PollTiming {
 
 extern struct PollTiming poll_timing;
 
-/* Formats state then prints it to the terminal */
-size_t ecu_format_state(char *buf, size_t n, PollTiming poll_timing);
+
+/* PWM */
+// TO DO: figure out values for the pump
+//uint16_t pump_duty_cycle;
 
 #ifdef __cplusplus
 }

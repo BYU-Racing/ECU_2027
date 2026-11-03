@@ -102,7 +102,9 @@ void pedals_poll(uint32_t current_time_ms) {
     }
 
     if (pedals_implausibility.active && (current_time_ms - pedals_implausibility.happened_at_ms > ALLOWED_IMPLAUSILIBTY_LENGTH_MS)) {
-        ecu_assert_failed(ASSERT_LEVEL_SAFETY, pedals_implausibility.line_info, pedals_implausibility.code);
+        LineInfo implausibility_info = pedals_implausibility.line_info;
+        AssertCode implausibility_code = pedals_implausibility.code;
+        ecu_assert_failed(ASSERT_LEVEL_SAFETY, implausibility_info, implausibility_code);
     }
 
     pedals_smooth_throttle(current_time_ms);
@@ -249,7 +251,7 @@ static void pedals_note_implausibility(uint32_t current_time_ms, LineInfo line_i
 /* ECU                                                                     */
 /* ====================================================================== */
 
-static void ecu_handle_startup_sequence(uint32_t current_time_ms) {
+void ecu_handle_startup_sequence(uint32_t current_time_ms) {
     if (!vsm_seen || (current_time_ms - vsm_last_rx_ms) > VSM_TIMEOUT_MS) {
         precharge_complete = false;
     }
