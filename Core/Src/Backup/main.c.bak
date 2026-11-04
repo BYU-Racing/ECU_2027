@@ -21,7 +21,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "usbd_cdc_if.h"
 #include <stdio.h>
 
 #include "../Lib/shared/ecu_assert.h"
@@ -46,7 +45,6 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define POLLING_SENSORS_INTERVAL_MS 30
 
 /* USER CODE END PM */
 
@@ -60,10 +58,8 @@ FDCAN_HandleTypeDef hfdcan3;
 
 TIM_HandleTypeDef htim3;
 
-PCD_HandleTypeDef hpcd_USB_FS;
-
 /* USER CODE BEGIN PV */
-
+uint32_t start_time;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -75,45 +71,40 @@ static void MX_FDCAN2_Init(void);
 static void MX_FDCAN3_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_ADC2_Init(void);
-static void MX_USB_PCD_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-/* Latches and continues to send shutdown message */
-static void __attribute__((noreturn)) fault_latch_loop(CAN_message_t fault_msg) {
-    Timer t = { HAL_GetTick(), 15 };
-    for (;;) {
-        if (timer_should_fire(&t, HAL_GetTick())) {
-            /* zero torque, inverter off */
-            can_buses_send_shutdown();         
-            /* ignore "queue full" here */   
-            can_bus_write(&DataCAN, &fault_msg);  
-        }
-        can_bus_service(&MotorCAN);
-        can_bus_service(&DataCAN);
-    }
-}
 
 /* Called when an assert is violated */
-static void ecu_assert_handler(AssertLevel level, LineInfo li, AssertCode code) {
+static void ecu_assert_handler(AssertLevel level, LineInfo line_info, AssertCode code) {
     if (level == ASSERT_LEVEL_SAFETY) {
-        HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, GPIO_PIN_RESET);
-        can_buses_send_shutdown();
-        CriticalFault fault = { .error_code = code,
-                                .assert_failure_line = (uint16_t)li.line_no,
-                                .file_name_hash = str_hash(li.filename) };
-        CAN_message_t msg = create_critical_fault_command(fault);
-        can_bus_write(&DataCAN, &msg);
-        fault_latch_loop(msg);                    /* never returns */
+      // Turns horn off
+      HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, GPIO_PIN_RESET);
+
+      /* Creates a shutdown message (all zeros) to send on the MotorCAN, effectively turning off the motor */
+      CAN_message_t shutdown_message = empty_can_message(MESSAGE_ID_CONTROL_COMMAND, 8);
+
+      /* Creates a can message with fault data to send along the DataCAN line 
+      * with error code, line of code where the error took place and file name */
+      CriticalFault fault = { .error_code = code, .assert_failure_line = (uint16_t)line_info.line_no, .file_name_hash = str_hash(line_info.filename) };
+      CAN_message_t fault_message = create_critical_fault_command(fault);
+      
+      /* Repeatedly sends both error message and 0 torque command to DataCAN and MotorCAN respectively.
+      * Also will blink the LED on board rapidly */
+      while (true) {
+        can_bus_write(&MotorCAN, &shutdown_message);
+        can_bus_service(&MotorCAN);
+        can_bus_write(&DataCAN, &fault_message);
+        can_bus_service(&DataCAN);
+        HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
+        HAL_Delay(ASSERT_HANDLER_DELAY_MS);
+      }
     }
 }
 
-// Terminal printing
-extern USBD_HandleTypeDef hUsbDeviceFS;
-extern volatile uint8_t usb_dtr;
 // Low level print function called after PRINTF(), uses debug wire SWO instead
 int _write(int file, char *ptr, int len) {
     for (int i = 0; i < len; i++) {
@@ -130,26 +121,22 @@ int _write(int file, char *ptr, int len) {
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
 
-  /* For testing, should turn on the led*/
+  /* For testing, should turn on the led onboard */
   HAL_GPIO_WritePin(LED_1_GPIO_Port, LED_1_Pin, GPIO_PIN_SET);
 
-  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-  DWT->CYCCNT = 0;
-  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-
-
-  //TO DO: implement these
-  //Timer broadcast_build_info_timer = { .last_fired_at = 0, .duration_ms = BROADCAST_INFO_INTERVAL_MS };
+  /* Initializes timer to print debug messages to the terminal */
   Timer debug_pacing = { .last_fired_at = 0, .duration_ms = 500 };
 
-  /* All these timers control how often messages are emitted for each of these sensors. */
-  Timer throttle1_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
-  Timer throttle2_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
+  /* All these timers control how often messages are emitted for each of these sensors 
+  * or how often each sensor value should be checked */
+  Timer throttle1_timer = { .last_fired_at = 0, .duration_ms = POLLING_APPS_INTERVAL_MS };
+  Timer throttle2_timer = { .last_fired_at = 0, .duration_ms = POLLING_APPS_INTERVAL_MS };
   Timer brake_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
   Timer start_switch_timer = { .last_fired_at = 0, .duration_ms = POLLING_SENSORS_INTERVAL_MS };
+  Timer pump_pwm_timer = { .last_fired_at = 0, .duration_ms = PUMP_PWM_UPDATE_INTERVAL_MS };
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -178,34 +165,18 @@ int main(void)
   MX_FDCAN3_Init();
   MX_TIM3_Init();
   MX_ADC2_Init();
-  MX_USB_PCD_Init();
   /* USER CODE BEGIN 2 */
-  __HAL_RCC_CRS_CLK_ENABLE();
-  RCC_CRSInitTypeDef crs = {0};
-  crs.Prescaler             = RCC_CRS_SYNC_DIV1;
-  crs.Source                = RCC_CRS_SYNC_SOURCE_USB;
-  crs.Polarity              = RCC_CRS_SYNC_POLARITY_RISING;
-  crs.ReloadValue           = __HAL_RCC_CRS_RELOADVALUE_CALCULATE(48000000, 1000);
-  crs.ErrorLimitValue       = RCC_CRS_ERRORLIMIT_DEFAULT;
-  crs.HSI48CalibrationValue = RCC_CRS_HSI48CALIBRATION_DEFAULT;
-  HAL_RCCEx_CRSConfig(&crs);
-
-  // Starts the CAN buses
+  /* Starts the CAN buses */
   can_buses_init();
-  // Start the ADC calibration
+
+  /* Start the ADC calibration */
   if (!adc_inputs_start()) { 
     Error_Handler(); 
   }
 
-  // Terminal printing init
-  setvbuf(stdout, NULL, _IONBF, 0);
-  static bool last_dtr;
-  if (usb_dtr && !last_dtr) {
-      PRINTF("=== ECU 2027 ===\r\nMotor CAN initialized\r\n");
-  }
-  last_dtr = usb_dtr;
+  /* Terminal printing init */
+  PRINTF("=== ECU 2027 ===\r\nMotor CAN initialized\r\n");
 
-  PollTiming poll_timing;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -219,45 +190,60 @@ int main(void)
       * so we always have to tell it what time it is. */
     uint32_t current_time_ms = HAL_GetTick();
     
+    /* Reads and processes MotorCAN messages then logs timing */
+    start_time = HAL_GetTick();
     CAN_message_t rmsg;
     while (can_bus_read(&MotorCAN, &rmsg)) { 
       ecu_process_message(current_time_ms, rmsg); 
     }
-    poll_timing.can_bus_read_timing = current_time_ms - HAL_GetTick();
+    poll_timing.can_bus_read_timing = HAL_GetTick() - start_time;
+
 
     /* Check if any sensors need to send values down the CAN bus, and
-    * if so, send them. */
+    * if so, send them, then logs timing.*/
     if (timer_should_fire(&throttle1_timer, current_time_ms)) {
-        pedals_input_throttle_one_position(current_time_ms, read_throttle_1());
+      start_time = HAL_GetTick();
+      pedals_input_throttle_one_position(current_time_ms, read_throttle_1());
+      poll_timing.throttle_1_timing = HAL_GetTick() - start_time;
     }
-    poll_timing.throttle_1_timing = current_time_ms - HAL_GetTick();
   
 
     if (timer_should_fire(&throttle2_timer, current_time_ms)) {
+        start_time = HAL_GetTick();
         pedals_input_throttle_two_position(current_time_ms, read_throttle_2());
+        poll_timing.throttle_2_timing = HAL_GetTick() - start_time;
     }
-    poll_timing.throttle_2_timing = current_time_ms - HAL_GetTick();
   
-
     if (timer_should_fire(&brake_timer, current_time_ms)) {
+        start_time = HAL_GetTick();
         pedals_input_brake_position(current_time_ms, read_brake());
+        poll_timing.brake_timing = HAL_GetTick() - start_time;
     }
-    poll_timing.brake_timing = current_time_ms - HAL_GetTick();
-  
 
+    if (timer_should_fire(&pump_pwm_timer, current_time_ms)) {
+      start_time = HAL_GetTick();
+      // TO DO: figure out pwm implementation
+      poll_timing.pump_timing = HAL_GetTick() - start_time;
+    }
+  
+    /* Reads switch value and updates ECU variables */
     if (timer_should_fire(&start_switch_timer, current_time_ms)) {
-        if (HAL_GPIO_ReadPin(SW_1_GPIO_Port, SW_1_Pin) == GPIO_PIN_SET) {
-          ecu_set_start_switch();
-         } else {
-          ecu_reset_start_switch();
-         }
+      start_time = HAL_GetTick();
+      if (HAL_GPIO_ReadPin(SW_1_GPIO_Port, SW_1_Pin) == GPIO_PIN_SET) {
+        ecu_set_start_switch();
+        } else {
+        ecu_reset_start_switch();
+        }
+      poll_timing.start_switch_timing = HAL_GetTick() - start_time;
     }
-    poll_timing.start_switch_timing = current_time_ms - HAL_GetTick();
   
 
-    /* Generate all outgoing messages and send each. */
+    /* Updates pedal data startup data before generating and sending torque command message */
+    start_time = HAL_GetTick();
+    ecu_handle_startup_sequence(current_time_ms); 
+    pedals_poll(current_time_ms); 
+    /* Generate all outgoing messages and send each then logs timing */
     CAN_message_t to_send;
-    ecu_update(current_time_ms);
     while (ecu_poll_can(current_time_ms, &to_send)){
       if (!can_bus_write(&MotorCAN, &to_send)) {
         ecu_assert_failed(ASSERT_LEVEL_SAFETY, CAPTURE_LINE_INFO(), ASSERT_CODE_CAN_TX_FULL);
@@ -265,32 +251,21 @@ int main(void)
     }
     /* Sends any available messages */
     can_bus_service(&MotorCAN);
-    poll_timing.can_bus_write_timing = current_time_ms - HAL_GetTick();
+    poll_timing.can_bus_write_timing = HAL_GetTick() - start_time;
   
 
+    /* Updates GpioState variables and logs timing */
+    start_time = HAL_GetTick();
     GpioState state = ecu_poll_gpio_state(current_time_ms);
     HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, state.horn_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(Brake_Light_IO_GPIO_Port, Brake_Light_IO_Pin, state.brake_light_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
     poll_timing.gpio_state_timing = current_time_ms - HAL_GetTick();
 
-
-    // TO DO: Added to broadcast who flashed code to the ECU. Currently doens't work.
-    // if (broadcast_build_info_timer.shouldFire(current_time_ms)) {
-    //     can_bus_write(&MotorCAN, &create_code_hash_message(GIT_COMMIT_HASH_U64));
-    //     can_bus_write(&MotorCAN, &create_commit_author_message(GIT_COMMIT_AUTHOR));
-    //     can_bus_write(&MotorCAN, &create_uploader_message(GIT_UPLOADER));
-    // }
-
     if (timer_should_fire(&debug_pacing, current_time_ms)) {
-      static char debug[200];
-      USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef *)hUsbDeviceFS.pClassData;
-      if (hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED && usb_dtr &&
-          hcdc != NULL && hcdc->TxState == 0) {
-          size_t n = ecu_format_state(debug, sizeof debug, poll_timing);
-          if (n) CDC_Transmit_FS((uint8_t *)debug, (uint16_t)n);
-      }
+      start_time = HAL_GetTick();
+      ecu_print_state();
+      poll_timing.debug_timing = HAL_GetTick() - start_time;
     }
-    poll_timing.debug_timing = current_time_ms - HAL_GetTick();
 
   }
   /* USER CODE END 3 */
@@ -312,10 +287,9 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_HSI48;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.HSI48State = RCC_HSI48_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV4;
@@ -625,39 +599,6 @@ static void MX_TIM3_Init(void)
 }
 
 /**
-  * @brief USB Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USB_PCD_Init(void)
-{
-
-  /* USER CODE BEGIN USB_Init 0 */
-
-  /* USER CODE END USB_Init 0 */
-
-  /* USER CODE BEGIN USB_Init 1 */
-
-  /* USER CODE END USB_Init 1 */
-  hpcd_USB_FS.Instance = USB;
-  hpcd_USB_FS.Init.dev_endpoints = 8;
-  hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
-  hpcd_USB_FS.Init.phy_itface = PCD_PHY_EMBEDDED;
-  hpcd_USB_FS.Init.Sof_enable = DISABLE;
-  hpcd_USB_FS.Init.low_power_enable = DISABLE;
-  hpcd_USB_FS.Init.lpm_enable = DISABLE;
-  hpcd_USB_FS.Init.battery_charging_enable = DISABLE;
-  if (HAL_PCD_Init(&hpcd_USB_FS) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USB_Init 2 */
-
-  /* USER CODE END USB_Init 2 */
-
-}
-
-/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -756,14 +697,20 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
-  __disable_irq();
+  // Turns horn off
   HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, GPIO_PIN_RESET);
+
+  /* Creates a shutdown message (all zeros) to send on the MotorCAN, effectively turning off the motor */
+  //CAN_message_t shutdown_message = empty_can_message(MESSAGE_ID_CONTROL_COMMAND, 8);
+
   while (1)
   {
-    can_buses_send_shutdown();
-    can_bus_service(&MotorCAN);
-    uint32_t start = DWT->CYCCNT;
-    while ((DWT->CYCCNT - start) < (SystemCoreClock / 1000u) * 15u) { }
+    // if (&MotorCAN.hfdcan != NULL){
+    //   can_bus_write(&MotorCAN, &shutdown_message);
+    //   can_bus_service(&MotorCAN);
+    // }
+    HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
+    HAL_Delay(ASSERT_HANDLER_DELAY_MS);
   }
   /* USER CODE END Error_Handler_Debug */
 }
