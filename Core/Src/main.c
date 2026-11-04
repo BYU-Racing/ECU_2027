@@ -701,13 +701,14 @@ void Error_Handler(void)
   HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, GPIO_PIN_RESET);
 
   /* Creates a shutdown message (all zeros) to send on the MotorCAN, effectively turning off the motor */
-  CAN_message_t shutdown_message = empty_can_message(MESSAGE_ID_CONTROL_COMMAND, 8);
+  //CAN_message_t shutdown_message = empty_can_message(MESSAGE_ID_CONTROL_COMMAND, 8);
 
-  __disable_irq();
   while (1)
   {
-    can_bus_write(&MotorCAN, &shutdown_message);
-    can_bus_service(&MotorCAN);
+    // if (&MotorCAN.hfdcan != NULL){
+    //   can_bus_write(&MotorCAN, &shutdown_message);
+    //   can_bus_service(&MotorCAN);
+    // }
     HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
     HAL_Delay(ASSERT_HANDLER_DELAY_MS);
   }
