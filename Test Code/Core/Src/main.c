@@ -115,6 +115,10 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+    HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
+    HAL_GPIO_TogglePin(Brake_Light_IO_GPIO_Port, Brake_Light_IO_Pin);
+    HAL_GPIO_TogglePin(Horn_IO_GPIO_Port, Horn_IO_Pin);
+    HAL_Delay(5000);
 
     /* USER CODE BEGIN 3 */
   }
