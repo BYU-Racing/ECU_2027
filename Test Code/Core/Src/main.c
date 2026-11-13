@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "stdio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -108,17 +109,42 @@ int main(void)
   MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
 
-  /* USER CODE END 2 */
+  uint16_t adc_buf[2];
+
+  HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
+
+  HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED);
+
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_buf, 2);
+
+  __HAL_DMA_DISABLE_IT(&hdma_adc1, DMA_IT_TC | DMA_IT_HT);
+  
+
+  HAL_ADC_Start(&hadc2);
+
+    /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
     /* USER CODE END WHILE */
+    uint16_t brake_an_value = HAL_GPIO_ReadPin(Brake_AN_GPIO_Port, Brake_AN_Pin);
+    printf("Brake AN Value: %d\n", brake_an_value);
+
+    uint16_t throttle_an_1_value = HAL_GPIO_ReadPin(APPS_AN_1_GPIO_Port, APPS_AN_1_Pin);
+    printf("Throttle AN 1 Value: %d\n", throttle_an_1_value);
+
+    uint16_t throttle_an_2_value = HAL_GPIO_ReadPin(APPS_AN_2_GPIO_Port, APPS_AN_2_Pin);
+    printf("Throttle AN 2 Value: %d\n", throttle_an_2_value);
+
+    uint16_t switch_value = HAL_GPIO_ReadPin(SW_1_GPIO_Port, SW_1_Pin);
+    printf("Switch Value: %d\n", switch_value);
+
     HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
     HAL_GPIO_TogglePin(Brake_Light_IO_GPIO_Port, Brake_Light_IO_Pin);
     HAL_GPIO_TogglePin(Horn_IO_GPIO_Port, Horn_IO_Pin);
-    HAL_Delay(5000);
+    HAL_Delay(1000);
 
     /* USER CODE BEGIN 3 */
   }
