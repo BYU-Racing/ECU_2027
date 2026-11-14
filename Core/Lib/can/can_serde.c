@@ -428,7 +428,8 @@ MotorInternalStates parse_motor_internal_states(CAN_message_t msg) {
 
     result.coolant_temperature_limiting = BIT_READ(msg.buf[7], 6);
 
-    result.limit_stall_burst_model = BIT_READ(msg.buf[7], 1);
+    /* TO DO: same as bms_active for some reason, double check this */
+    //result.limit_stall_burst_model = BIT_READ(msg.buf[7], 1);
 
     return result;
 }

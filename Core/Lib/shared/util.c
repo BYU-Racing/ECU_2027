@@ -34,10 +34,6 @@ bool adc_inputs_start(void) {
 
     if (HAL_ADC_Start_DMA(&hadc2, (uint32_t *)adc2_buf, ADC2_CHANNEL_COUNT) != HAL_OK) {
         return false;
-    }    
-
-    if (HAL_ADC_Start(&hadc2) != HAL_OK) {
-        return false;
     }
 
     return true;

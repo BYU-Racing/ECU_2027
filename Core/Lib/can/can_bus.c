@@ -8,7 +8,7 @@ void can_bus_init(CanBus *bus, FDCAN_HandleTypeDef *hfdcan){
     bus->rx_overflow = 0;
 }
 
-bool can_bus_start(CanBus *bus){
+bool can_bus_start(CanBus *bus, bool activate_interrupts){
     // Accepts unknown IDs and places them in RX FIFO 0
     if (HAL_FDCAN_ConfigGlobalFilter(bus->hfdcan, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE) != HAL_OK) {
         return false;
@@ -20,7 +20,7 @@ bool can_bus_start(CanBus *bus){
     }
 
     // Enables the interrupt for new messages
-    if (HAL_FDCAN_ActivateNotification(bus->hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
+    if (activate_interrupts && HAL_FDCAN_ActivateNotification(bus->hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
         return false;
     }
 
@@ -70,7 +70,7 @@ void can_bus_service(CanBus *bus){
         header.Identifier            = message->id;
         header.IdType                = message->flags.extended ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID;
         header.TxFrameType           = message->flags.remote ? FDCAN_REMOTE_FRAME : FDCAN_DATA_FRAME;
-        header.DataLength            = ((uint32_t)message->len) << 16;   /* FDCAN_DLC_BYTES_n */
+        header.DataLength            = ((uint32_t)message->len);   /* FDCAN_DLC_BYTES_n */
         header.ErrorStateIndicator   = FDCAN_ESI_ACTIVE;
         header.BitRateSwitch         = FDCAN_BRS_OFF;
         header.FDFormat              = FDCAN_CLASSIC_CAN;
@@ -105,7 +105,7 @@ void can_bus_on_rx_interrupt(CanBus *bus) {
             continue;
         }
 
-        uint32_t dlc = rx_header.DataLength >> 16;
+        uint32_t dlc = rx_header.DataLength;
         CAN_message_t *message = &bus->rx_buf[bus->rx_head];
         memset(message, 0, sizeof(*message));   /* clears buffer */
         message->id  = rx_header.Identifier;

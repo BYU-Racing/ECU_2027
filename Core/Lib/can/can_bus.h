@@ -27,7 +27,7 @@ extern "C" {
 
 void can_bus_init(CanBus *bus, FDCAN_HandleTypeDef *hfdcan);
 
-bool can_bus_start(CanBus *bus);
+bool can_bus_start(CanBus *bus, bool activate_interrupts);
 
 bool can_bus_write(CanBus *bus, const CAN_message_t *msg);
 

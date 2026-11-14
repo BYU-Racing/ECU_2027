@@ -1,5 +1,4 @@
 #include "can_buses.h"
-#include "can_serde.h"
 #include "../shared/util.h"
 
 extern FDCAN_HandleTypeDef hfdcan2, hfdcan3;
@@ -14,12 +13,12 @@ extern "C" {
 void can_buses_init(void) {
     can_bus_init(&DataCAN, &hfdcan2);
     can_bus_init(&MotorCAN, &hfdcan3);
-    if (!can_bus_start(&DataCAN)) {
+    if (!can_bus_start(&DataCAN, 0)) {
         Error_Handler();
     }
     PRINTF("DataCAN initialized\n\n");
 
-    if (!can_bus_start(&MotorCAN)) {
+    if (!can_bus_start(&MotorCAN, 1)) {
         Error_Handler();
     }
     PRINTF("MotorCAN initialized\n\n");
