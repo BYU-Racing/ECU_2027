@@ -208,7 +208,6 @@ int main(void)
       poll_timing.throttle_1_timing = HAL_GetTick() - start_time;
     }
   
-
     if (timer_should_fire(&throttle2_timer, current_time_ms)) {
         start_time = HAL_GetTick();
         pedals_input_throttle_two_position(current_time_ms, read_throttle_2());
@@ -260,7 +259,7 @@ int main(void)
     GpioState state = ecu_poll_gpio_state(current_time_ms);
     HAL_GPIO_WritePin(Horn_IO_GPIO_Port, Horn_IO_Pin, state.horn_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(Brake_Light_IO_GPIO_Port, Brake_Light_IO_Pin, state.brake_light_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    poll_timing.gpio_state_timing = current_time_ms - HAL_GetTick();
+    poll_timing.gpio_state_timing = HAL_GetTick() - start_time;
 
     if (timer_should_fire(&debug_pacing, current_time_ms)) {
       start_time = HAL_GetTick();

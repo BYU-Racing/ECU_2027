@@ -16,7 +16,8 @@ extern DMA_HandleTypeDef hdma_adc1;
 
 enum { IDX_THROTTLE_1 = 0, IDX_THROTTLE_2 = 1};
 
-static uint16_t adc_buf[ADC1_CHANNEL_COUNT];
+volatile uint16_t adc1_buf[ADC1_CHANNEL_COUNT];
+volatile uint16_t adc2_buf[ADC2_CHANNEL_COUNT];
 
 bool adc_inputs_start(void) {
     if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK) {
@@ -27,14 +28,11 @@ bool adc_inputs_start(void) {
         return false;
     }
 
-    if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_buf, ADC1_CHANNEL_COUNT) != HAL_OK) {
+    if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc1_buf, ADC1_CHANNEL_COUNT) != HAL_OK) {
         return false;
     }
 
-    __HAL_DMA_DISABLE_IT(&hdma_adc1, DMA_IT_TC | DMA_IT_HT);
-    
-
-    if (HAL_ADC_Start(&hadc2) != HAL_OK) {
+    if (HAL_ADC_Start_DMA(&hadc2, (uint32_t *)adc2_buf, ADC2_CHANNEL_COUNT) != HAL_OK) {
         return false;
     }
 
@@ -42,19 +40,16 @@ bool adc_inputs_start(void) {
 }
 
 /* The DMA updates the buffer in the background, so read through a volatile pointer. */
-static uint16_t adc_get(int i) { 
-    return *(volatile uint16_t *)&adc_buf[i]; 
-}
-
 uint16_t read_throttle_1(void) {
-    return adc_get(IDX_THROTTLE_1); 
+    return *(volatile uint16_t *)&adc1_buf[IDX_THROTTLE_1]; 
 }
 
 uint16_t read_throttle_2(void) { 
-    return adc_get(IDX_THROTTLE_2); 
+    return *(volatile uint16_t *)&adc1_buf[IDX_THROTTLE_2]; 
 }
-uint16_t read_brake(void)      {
-    return (uint16_t) HAL_ADC_GetValue(&hadc2);
+
+uint16_t read_brake(void) {
+    return *(volatile uint16_t *)&adc2_buf[0];
 }
 
 // Returns the percantage in 0-100, given the raw ADC value.
